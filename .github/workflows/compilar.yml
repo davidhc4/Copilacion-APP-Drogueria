@@ -34,14 +34,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer "cython<3.0"
 
-      - name: Aceptar licencias de Android (SOLUCIÓN)
+      - name: Configurar Buildozer y aceptar licencias automáticamente
         run: |
-          yes | ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-        continue-on-error: true
+          # Inicializa Buildozer para que cree la estructura de carpetas
+          buildozer init
+          # Crea un script que responde "yes" a todas las licencias
+          echo "#!/bin/bash" > accept_licenses.sh
+          echo "yes | ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true" >> accept_licenses.sh
+          chmod +x accept_licenses.sh
 
-      - name: Compilar el APK
+      - name: Compilar el APK (con auto-aceptación de licencias)
         run: |
-          buildozer android debug
+          # Esta variable de entorno obliga a Buildozer a aceptar licencias
+          export ANDROID_ACCEPT_SDK_LICENSE="yes"
+          # Compila, y si falla por licencias, las acepta y reintenta
+          buildozer android debug || {
+            echo "Reintentando después de aceptar licencias..."
+            ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+            echo "yes" | ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+            export ANDROID_ACCEPT_SDK_LICENSE="yes"
+            buildozer android debug
+          }
         env:
           ANDROID_ACCEPT_SDK_LICENSE: "yes"
 
