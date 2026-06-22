@@ -41,6 +41,8 @@ jobs:
           rm -rf ~/.buildozer/android/platform/apache-ant-*
           rm -rf ~/.buildozer/cache
           rm -rf ~/.buildozer/android/platform/python-for-android
+          rm -rf ~/.buildozer/android/platform/build-arm64-v8a/build/other_builds/hostpython3
+          rm -rf ~/.buildozer/android/platform/build-arm64-v8a/build/other_builds/python3
 
       - name: Instalar Android SDK y NDK con setup-android
         uses: android-actions/setup-android@v3
@@ -79,20 +81,23 @@ jobs:
           fi
           
           # 4. Crear enlace para sdkmanager en la ruta antigua (tools/bin/)
-          # Esto es crucial para que Buildozer encuentre sdkmanager
           mkdir -p /usr/local/lib/android/sdk/tools/bin
           ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/lib/android/sdk/tools/bin/sdkmanager
           ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/avdmanager /usr/local/lib/android/sdk/tools/bin/avdmanager
           echo "✅ Enlaces de sdkmanager creados en tools/bin/"
-          
-          # 5. Verificar que sdkmanager funciona
-          echo "🔍 Verificando sdkmanager..."
-          /usr/local/lib/android/sdk/tools/bin/sdkmanager --version || echo "⚠️ sdkmanager no responde, pero continuamos..."
 
       - name: Aceptar licencias de Android
         run: |
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
           yes | /usr/local/lib/android/sdk/tools/bin/sdkmanager --licenses || true
+
+      - name: Configurar Python 3.13 y limpiar caché
+        run: |
+          echo "P4A_PYTHON_VERSION=3.13" >> $GITHUB_ENV
+          echo "PYTHON_VERSION=3.13" >> $GITHUB_ENV
+          rm -rf ~/.buildozer/android/platform/build-arm64-v8a/build/other_builds/hostpython3
+          rm -rf ~/.buildozer/android/platform/build-arm64-v8a/build/other_builds/python3
+          echo "✅ Caché de Python limpiada, forzando Python 3.13"
 
       - name: Configurar entorno y compilar
         run: |
@@ -100,6 +105,7 @@ jobs:
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
           export ANDROID_ACCEPT_SDK_LICENSE="yes"
           export P4A_PYTHON_VERSION=3.13
+          export PYTHON_VERSION=3.13
           
           # Verificar enlaces antes de compilar
           echo "📂 Verificando enlaces:"
