@@ -34,11 +34,35 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer "cython<3.0"
 
+      - name: Descargar y configurar Android SDK manualmente
+        run: |
+          # Crear directorio para el SDK
+          mkdir -p ~/.buildozer/android/platform/android-sdk
+          cd ~/.buildozer/android/platform/android-sdk
+          
+          # Descargar command line tools (versión estable)
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
+          
+          # Configurar variables de entorno para el SDK
+          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
+          export PATH=$PATH:$ANDROID_SDK_ROOT/latest/bin
+          
+          # Aceptar TODAS las licencias automáticamente
+          yes | ~/.buildozer/android/platform/android-sdk/latest/bin/sdkmanager --licenses || true
+          
+          # Instalar build-tools y plataformas necesarias
+          ~/.buildozer/android/platform/android-sdk/latest/bin/sdkmanager "build-tools;37.0.0" "platforms;android-33" "platform-tools" --verbose || true
+
       - name: Compilar el APK
         run: |
+          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
+          export PATH=$PATH:$ANDROID_SDK_ROOT/latest/bin
           export ANDROID_ACCEPT_SDK_LICENSE="yes"
           buildozer android debug
         env:
+          ANDROID_SDK_ROOT: ~/.buildozer/android/platform/android-sdk
           ANDROID_ACCEPT_SDK_LICENSE: "yes"
 
       - name: Subir el APK como resultado
