@@ -99,6 +99,7 @@ jobs:
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
           export ANDROID_ACCEPT_SDK_LICENSE="yes"
+          export P4A_PYTHON_VERSION=3.13
           
           # Verificar enlaces antes de compilar
           echo "📂 Verificando enlaces:"
