@@ -47,12 +47,50 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-33 build-tools;33.0.0 ndk;28.0.13004108'
 
-      - name: Verificar instalación del NDK
+      - name: Detectar ubicación del NDK y configurar enlaces
         run: |
-          echo "NDK instalado en: /usr/local/lib/android/ndk"
-          ls -la /usr/local/lib/android/ndk
-          echo "Versión del NDK:"
-          cat /usr/local/lib/android/ndk/source.properties || echo "No se encontró source.properties"
+          echo "🔍 Buscando NDK en el sistema..."
+          
+          # Buscar el NDK en posibles ubicaciones
+          NDK_PATH=""
+          
+          # Opción 1: NDK instalado por setup-android en sdk/ndk/
+          if [ -d "/usr/local/lib/android/sdk/ndk/28.0.13004108" ]; then
+            NDK_PATH="/usr/local/lib/android/sdk/ndk/28.0.13004108"
+            echo "✅ NDK encontrado en: $NDK_PATH"
+          elif [ -d "/usr/local/lib/android/sdk/ndk/28.1.13004108" ]; then
+            NDK_PATH="/usr/local/lib/android/sdk/ndk/28.1.13004108"
+            echo "✅ NDK encontrado en: $NDK_PATH"
+          elif [ -d "/usr/local/lib/android/sdk/ndk" ]; then
+            # Tomar la primera carpeta que encuentre dentro de ndk/
+            NDK_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/*/ 2>/dev/null | head -1)
+            if [ -n "$NDK_PATH" ]; then
+              echo "✅ NDK encontrado en: $NDK_PATH"
+            fi
+          elif [ -d "/usr/local/lib/android/ndk" ]; then
+            NDK_PATH="/usr/local/lib/android/ndk"
+            echo "✅ NDK encontrado en: $NDK_PATH"
+          fi
+          
+          # Si no se encontró, instalar manualmente
+          if [ -z "$NDK_PATH" ]; then
+            echo "⚠️ No se encontró NDK, instalando manualmente..."
+            mkdir -p /usr/local/lib/android/ndk
+            cd /usr/local/lib/android/ndk
+            wget -q https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
+            unzip -q android-ndk-r28c-linux.zip
+            rm android-ndk-r28c-linux.zip
+            if [ -d "android-ndk-r28c" ]; then
+              mv android-ndk-r28c/* ./
+              rm -rf android-ndk-r28c
+            fi
+            NDK_PATH="/usr/local/lib/android/ndk"
+            echo "✅ NDK instalado manualmente en: $NDK_PATH"
+          fi
+          
+          # Exportar variable para el siguiente paso
+          echo "NDK_PATH=$NDK_PATH" >> $GITHUB_ENV
+          echo "✅ Configuración completada. NDK en: $NDK_PATH"
 
       - name: Aceptar licencias de Android
         run: |
@@ -63,8 +101,11 @@ jobs:
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-          export ANDROID_NDK_HOME=/usr/local/lib/android/ndk
           export ANDROID_ACCEPT_SDK_LICENSE="yes"
+          export ANDROID_NDK_HOME=${{ env.NDK_PATH }}
+          
+          echo "📂 SDK en: $ANDROID_HOME"
+          echo "📂 NDK en: $ANDROID_NDK_HOME"
           
           # Limpiar y crear enlaces simbólicos
           rm -rf ~/.buildozer/android/platform/android-sdk
@@ -74,13 +115,20 @@ jobs:
           # Enlazar el SDK del sistema
           ln -sf /usr/local/lib/android/sdk ~/.buildozer/android/platform/android-sdk
           
-          # Enlazar el NDK del sistema con el nombre que espera Buildozer
-          ln -sf /usr/local/lib/android/ndk ~/.buildozer/android/platform/android-ndk-r28c
+          # Enlazar el NDK encontrado
+          if [ -n "$ANDROID_NDK_HOME" ] && [ -d "$ANDROID_NDK_HOME" ]; then
+            ln -sf $ANDROID_NDK_HOME ~/.buildozer/android/platform/android-ndk-r28c
+            echo "✅ Enlace simbólico creado: ~/.buildozer/android/platform/android-ndk-r28c -> $ANDROID_NDK_HOME"
+          else
+            echo "❌ ERROR: NDK no encontrado en: $ANDROID_NDK_HOME"
+            exit 1
+          fi
           
           # Verificar que los enlaces funcionen
+          echo "📂 Contenido de ~/.buildozer/android/platform/:"
           ls -la ~/.buildozer/android/platform/
           
-          # Compilar
+          echo "🚀 Iniciando compilación del APK..."
           buildozer android debug
         env:
           ANDROID_ACCEPT_SDK_LICENSE: "yes"
