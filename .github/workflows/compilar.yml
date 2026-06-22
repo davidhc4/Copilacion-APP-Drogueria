@@ -40,11 +40,19 @@ jobs:
           rm -rf ~/.buildozer/android/platform/android-ndk-*
           rm -rf ~/.buildozer/android/platform/apache-ant-*
           rm -rf ~/.buildozer/cache
+          rm -rf ~/.buildozer/android/platform/python-for-android
 
       - name: Instalar Android SDK y NDK con setup-android
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-33 build-tools;33.0.0 ndk;28.0.13004108'
+
+      - name: Verificar instalación del NDK
+        run: |
+          echo "NDK instalado en: /usr/local/lib/android/ndk"
+          ls -la /usr/local/lib/android/ndk
+          echo "Versión del NDK:"
+          cat /usr/local/lib/android/ndk/source.properties || echo "No se encontró source.properties"
 
       - name: Aceptar licencias de Android
         run: |
@@ -58,13 +66,21 @@ jobs:
           export ANDROID_NDK_HOME=/usr/local/lib/android/ndk
           export ANDROID_ACCEPT_SDK_LICENSE="yes"
           
-          # Crear enlaces simbólicos para que Buildozer encuentre el SDK
-          mkdir -p ~/.buildozer/android/platform
+          # Limpiar y crear enlaces simbólicos
           rm -rf ~/.buildozer/android/platform/android-sdk
           rm -rf ~/.buildozer/android/platform/android-ndk-*
+          mkdir -p ~/.buildozer/android/platform
+          
+          # Enlazar el SDK del sistema
           ln -sf /usr/local/lib/android/sdk ~/.buildozer/android/platform/android-sdk
+          
+          # Enlazar el NDK del sistema con el nombre que espera Buildozer
           ln -sf /usr/local/lib/android/ndk ~/.buildozer/android/platform/android-ndk-r28c
           
+          # Verificar que los enlaces funcionen
+          ls -la ~/.buildozer/android/platform/
+          
+          # Compilar
           buildozer android debug
         env:
           ANDROID_ACCEPT_SDK_LICENSE: "yes"
