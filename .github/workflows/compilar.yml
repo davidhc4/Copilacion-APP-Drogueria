@@ -47,50 +47,47 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-33 build-tools;33.0.0 ndk;28.0.13004108'
 
-      - name: Detectar ubicación del NDK y configurar enlaces
+      - name: Configurar enlaces simbólicos para SDK y NDK
         run: |
-          echo "🔍 Buscando NDK en el sistema..."
+          echo "🔍 Configurando enlaces simbólicos..."
           
-          # Buscar el NDK en posibles ubicaciones
+          # 1. Crear estructura de carpetas para Buildozer
+          mkdir -p ~/.buildozer/android/platform
+          
+          # 2. Enlazar SDK (ruta principal)
+          rm -rf ~/.buildozer/android/platform/android-sdk
+          ln -sf /usr/local/lib/android/sdk ~/.buildozer/android/platform/android-sdk
+          echo "✅ SDK enlazado"
+          
+          # 3. Enlazar NDK
           NDK_PATH=""
-          
-          # Opción 1: NDK instalado por setup-android en sdk/ndk/
           if [ -d "/usr/local/lib/android/sdk/ndk/28.0.13004108" ]; then
             NDK_PATH="/usr/local/lib/android/sdk/ndk/28.0.13004108"
-            echo "✅ NDK encontrado en: $NDK_PATH"
-          elif [ -d "/usr/local/lib/android/sdk/ndk/28.1.13004108" ]; then
-            NDK_PATH="/usr/local/lib/android/sdk/ndk/28.1.13004108"
-            echo "✅ NDK encontrado en: $NDK_PATH"
           elif [ -d "/usr/local/lib/android/sdk/ndk" ]; then
-            # Tomar la primera carpeta que encuentre dentro de ndk/
             NDK_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/*/ 2>/dev/null | head -1)
-            if [ -n "$NDK_PATH" ]; then
-              echo "✅ NDK encontrado en: $NDK_PATH"
-            fi
           elif [ -d "/usr/local/lib/android/ndk" ]; then
             NDK_PATH="/usr/local/lib/android/ndk"
-            echo "✅ NDK encontrado en: $NDK_PATH"
           fi
           
-          # Si no se encontró, instalar manualmente
-          if [ -z "$NDK_PATH" ]; then
-            echo "⚠️ No se encontró NDK, instalando manualmente..."
-            mkdir -p /usr/local/lib/android/ndk
-            cd /usr/local/lib/android/ndk
-            wget -q https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
-            unzip -q android-ndk-r28c-linux.zip
-            rm android-ndk-r28c-linux.zip
-            if [ -d "android-ndk-r28c" ]; then
-              mv android-ndk-r28c/* ./
-              rm -rf android-ndk-r28c
-            fi
-            NDK_PATH="/usr/local/lib/android/ndk"
-            echo "✅ NDK instalado manualmente en: $NDK_PATH"
+          if [ -n "$NDK_PATH" ]; then
+            rm -rf ~/.buildozer/android/platform/android-ndk-r28c
+            ln -sf $NDK_PATH ~/.buildozer/android/platform/android-ndk-r28c
+            echo "✅ NDK enlazado desde: $NDK_PATH"
+          else
+            echo "❌ ERROR: No se encontró el NDK"
+            exit 1
           fi
           
-          # Exportar variable para el siguiente paso
-          echo "NDK_PATH=$NDK_PATH" >> $GITHUB_ENV
-          echo "✅ Configuración completada. NDK en: $NDK_PATH"
+          # 4. Crear enlace para sdkmanager en la ruta antigua (tools/bin/)
+          # Esto es crucial para que Buildozer encuentre sdkmanager
+          mkdir -p /usr/local/lib/android/sdk/tools/bin
+          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/lib/android/sdk/tools/bin/sdkmanager
+          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/avdmanager /usr/local/lib/android/sdk/tools/bin/avdmanager
+          echo "✅ Enlaces de sdkmanager creados en tools/bin/"
+          
+          # 5. Verificar que sdkmanager funciona
+          echo "🔍 Verificando sdkmanager..."
+          /usr/local/lib/android/sdk/tools/bin/sdkmanager --version || echo "⚠️ sdkmanager no responde, pero continuamos..."
 
       - name: Aceptar licencias de Android
         run: |
@@ -102,30 +99,10 @@ jobs:
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
           export ANDROID_ACCEPT_SDK_LICENSE="yes"
-          export ANDROID_NDK_HOME=${{ env.NDK_PATH }}
           
-          echo "📂 SDK en: $ANDROID_HOME"
-          echo "📂 NDK en: $ANDROID_NDK_HOME"
-          
-          # Limpiar y crear enlaces simbólicos
-          rm -rf ~/.buildozer/android/platform/android-sdk
-          rm -rf ~/.buildozer/android/platform/android-ndk-*
-          mkdir -p ~/.buildozer/android/platform
-          
-          # Enlazar el SDK del sistema
-          ln -sf /usr/local/lib/android/sdk ~/.buildozer/android/platform/android-sdk
-          
-          # Enlazar el NDK encontrado
-          if [ -n "$ANDROID_NDK_HOME" ] && [ -d "$ANDROID_NDK_HOME" ]; then
-            ln -sf $ANDROID_NDK_HOME ~/.buildozer/android/platform/android-ndk-r28c
-            echo "✅ Enlace simbólico creado: ~/.buildozer/android/platform/android-ndk-r28c -> $ANDROID_NDK_HOME"
-          else
-            echo "❌ ERROR: NDK no encontrado en: $ANDROID_NDK_HOME"
-            exit 1
-          fi
-          
-          # Verificar que los enlaces funcionen
-          echo "📂 Contenido de ~/.buildozer/android/platform/:"
+          # Verificar enlaces antes de compilar
+          echo "📂 Verificando enlaces:"
+          ls -la /usr/local/lib/android/sdk/tools/bin/
           ls -la ~/.buildozer/android/platform/
           
           echo "🚀 Iniciando compilación del APK..."
