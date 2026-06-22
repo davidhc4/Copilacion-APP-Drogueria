@@ -1,73 +1,68 @@
-[app]
+# -*- coding: utf-8 -*-
+"""
+================================================================================
+                    MÓDULO DE LICENCIA — PRECIOS FARMACENTER
+================================================================================
+AVISO DE DERECHO DE AUTOR
+    © 2026 Santiago Rincón Chávez y Juan David Chávez Garavito.
+    Obra de soporte lógico protegida por la Ley 23 de 1982 y la Decisión
+    Andina 351 de 1993 sobre Derecho de Autor en Colombia.
+    Todos los derechos reservados.
 
-# (str) Title of your application
-title = Precios Farmacenter
+    Este módulo contiene la lógica de licenciamiento del producto.
+    ESTE ARCHIVO ESTÁ DISEÑADO PARA COMPILARSE CON CYTHON (.so / .pyd)
+    de modo que su contenido NO quede en texto plano dentro del APK.
+================================================================================
 
-# (str) Package name
-package.name = preciosfarmacenter
+IMPORTANTE PARA EL DESARROLLADOR:
+    - Cada cliente debe recibir un build con un CLIENTE_SECRETO distinto.
+      Así, si un comprador descubre su propio secreto, no puede generar
+      códigos de activación válidos para los dispositivos de otros clientes.
+    - El valor de abajo es solo un marcador. Cámbialo por cliente antes
+      de compilar (ej: "FC_2026_CLIENTE_MAIZAMARILLO_a8f3").
+"""
 
-# (str) Package domain (needed for android/ios packaging)
-package.domain = com.farmacenter
+import hashlib
 
-# (str) Source code where the main.py live
-source.dir = .
+# ----------------------------------------------------------------------
+# Secreto por cliente. CAMBIAR ESTE VALOR EN CADA BUILD QUE SE ENTREGUE.
+# Idealmente generado al azar y guardado en TU registro privado de ventas.
+# ----------------------------------------------------------------------
+CLIENTE_SECRETO = "FC_2026_MAIZAMARILLO_befda9"
 
-# (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,kv,atlas,db,csv
+# Sufijo de versión del esquema de licencia. No es secreto.
+_LIC_VERSION = "v2"
 
-# (str) Application versioning (method 1)
-version = 2.7.1
 
-# (list) Application requirements
-# IMPORTANTE: cython aquí permite compilar licencia.py a binario (.so)
-# y no dejarlo como .pyc fácilmente descompilable.
-requirements = python3,kivy==2.3.1,requests,certifi,cython
+def generar_device_id(base_material: str) -> str:
+    """
+    Recibe el material de identificación del dispositivo (android_id +
+    modelo + fabricante, o el nombre del equipo en escritorio) y devuelve
+    un device_id corto y estable. La app llama a esta función pasando el
+    material; así la recolección del hardware queda en main.py y la
+    lógica sensible aquí (compilable con Cython).
+    """
+    return hashlib.sha256(base_material.encode()).hexdigest()[:16]
 
-# (str) Presplash of the application
-#presplash.filename = %(source.dir)s/logo_farmacenter.png
 
-# (str) Icon of the application
-icon.filename = %(source.dir)s/icono.png
+def _firma(device_id: str) -> str:
+    """Firma interna. No exponer."""
+    material = f"{device_id}|{CLIENTE_SECRETO}|{_LIC_VERSION}"
+    return hashlib.sha256(material.encode()).hexdigest()[:12].upper()
 
-# (str) Supported orientation (one of landscape, sensorLandscape, portrait or all)
-orientation = portrait
 
-# (bool) Indicate if the application should be fullscreen or not
-fullscreen = 0
+def generar_codigo_activacion(device_id: str) -> str:
+    """
+    Usar SOLO en tu herramienta interna de generación de códigos
+    (la que tú ejecutas en tu PC). No se llama desde la app del cliente.
+    """
+    return _firma(device_id)
 
-#
-# Android specific
-#
 
-# (list) Permissions
-android.permissions = INTERNET, ACCESS_NETWORK_STATE
-
-# (int) Target Android API, should be as high as possible.
-android.api = 33
-
-# (int) Minimum API your APK / AAB will support.
-android.minapi = 21
-
-# (str) Android NDK version to use
-#android.ndk = 25b
-
-# (list) The Android archs to build for
-android.archs = arm64-v8a, armeabi-v7a
-
-# (bool) enables Android auto backup feature (Android API >=23)
-android.allow_backup = True
-
-#
-# Python for android (p4a) specific
-#
-
-# (str) The format used to package the app for debug mode (apk or aar).
-# p4a.bootstrap = sdl2
-
-[buildozer]
-
-# (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
-log_level = 2
-
-# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
-warn_on_root = 1
+def verificar_codigo(device_id: str, codigo_ingresado: str) -> bool:
+    """
+    Valida el código que el cliente escribe en la pantalla de activación.
+    """
+    if not codigo_ingresado:
+        return False
+    return codigo_ingresado.strip().upper() == _firma(device_id)
