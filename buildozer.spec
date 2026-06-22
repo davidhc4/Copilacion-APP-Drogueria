@@ -16,7 +16,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db,csv
 
 # (str) Application versioning (method 1)
-version = 2.7.1
+version = 2.9.9
 
 # (list) Application requirements
 # IMPORTANTE: cython aquí permite compilar licencia.py a binario (.so)
@@ -52,7 +52,7 @@ android.minapi = 21
 #android.ndk = 25b
 
 # (list) The Android archs to build for
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 
 # (bool) enables Android auto backup feature (Android API >=23)
 android.allow_backup = True
@@ -71,3 +71,6 @@ log_level = 2
 
 # (int) Display warning if buildozer is run as root (0 = False, 1 = True)
 warn_on_root = 1
+
+android.sdk_path = /usr/local/lib/android/sdk
+android.ndk_path = /usr/local/lib/android/ndk
