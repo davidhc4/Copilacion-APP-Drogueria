@@ -23,6 +23,9 @@ version = 2.9.9
 # y no dejarlo como .pyc fácilmente descompilable.
 requirements = python3,kivy==2.3.1,requests,certifi,cython
 
+# (str) Python version to use (android only)
+android.python_version = 3.13
+
 # (str) Presplash of the application
 #presplash.filename = %(source.dir)s/logo_farmacenter.png
 
