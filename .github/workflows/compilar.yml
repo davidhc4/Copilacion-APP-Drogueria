@@ -34,40 +34,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer "cython<3.0"
 
-      - name: Instalar Android SDK (cmdline-tools) manualmente
+      - name: Instalar Android SDK y NDK (oficial)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-33 build-tools;33.0.0'
+
+      - name: Aceptar licencias de Android
         run: |
-          # Crear directorio para el SDK
-          mkdir -p ~/.buildozer/android/platform/android-sdk
-          cd ~/.buildozer/android/platform/android-sdk
-          
-          # Descargar las herramientas de línea de comandos (última versión estable)
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip
-          rm cmdline-tools.zip
-          
-          # Mover a la estructura esperada por Buildozer
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
-          
-          # Crear un enlace simbólico para que Buildozer encuentre sdkmanager en la ruta antigua
-          mkdir -p tools/bin
-          ln -s ../cmdline-tools/latest/bin/sdkmanager tools/bin/sdkmanager
-          ln -s ../cmdline-tools/latest/bin/avdmanager tools/bin/avdmanager
-          
-          # Aceptar todas las licencias automáticamente
-          echo "yes" | ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          
-          # Instalar las herramientas necesarias
-          ~/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Compilar el APK
         run: |
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
           export ANDROID_ACCEPT_SDK_LICENSE="yes"
-          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
           buildozer android debug
         env:
           ANDROID_ACCEPT_SDK_LICENSE: "yes"
-          ANDROID_SDK_ROOT: ~/.buildozer/android/platform/android-sdk
 
       - name: Subir el APK como resultado
         uses: actions/upload-artifact@v4
