@@ -34,19 +34,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer "cython<3.0"
 
-      - name: Instalar Android SDK y NDK (oficial)
+      - name: Instalar Android SDK y NDK con setup-android
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-33 build-tools;33.0.0'
 
       - name: Aceptar licencias de Android
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          yes | /usr/local/lib/android/sdk/tools/bin/sdkmanager --licenses || true
 
-      - name: Compilar el APK
+      - name: Configurar entorno y compilar
         run: |
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          export ANDROID_NDK_HOME=/usr/local/lib/android/ndk
           export ANDROID_ACCEPT_SDK_LICENSE="yes"
+          # Asegurar que Buildozer use las rutas correctas
+          mkdir -p ~/.buildozer/android/platform
+          ln -sf /usr/local/lib/android/sdk ~/.buildozer/android/platform/android-sdk
+          ln -sf /usr/local/lib/android/ndk ~/.buildozer/android/platform/android-ndk-r28c
           buildozer android debug
         env:
           ANDROID_ACCEPT_SDK_LICENSE: "yes"
