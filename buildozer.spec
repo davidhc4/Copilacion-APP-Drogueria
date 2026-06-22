@@ -19,9 +19,8 @@ source.include_exts = py,png,jpg,kv,atlas,db,csv
 version = 2.9.9
 
 # (list) Application requirements
-# IMPORTANTE: cython aquí permite compilar licencia.py a binario (.so)
-# y no dejarlo como .pyc fácilmente descompilable.
-requirements = python3,kivy==2.3.1,requests,certifi,cython
+# SIN CYTHON para evitar problemas con Python 3.14
+requirements = python3,kivy==2.3.1,requests,certifi
 
 # (str) Python version to use (android only)
 android.python_version = 3.13
@@ -52,12 +51,10 @@ android.api = 33
 android.minapi = 21
 
 # (str) Android NDK version to use
-#android.ndk = 25b
+android.ndk = 28c
 
 # (list) The Android archs to build for
 android.archs = arm64-v8a
-
-android.ndk = 28c
 
 # (bool) enables Android auto backup feature (Android API >=23)
 android.allow_backup = True
@@ -78,5 +75,4 @@ log_level = 2
 warn_on_root = 1
 
 android.sdk_path = /usr/local/lib/android/sdk
-
-android.ndk_path = /usr/local/lib/android/ndk
+android.ndk_path = /usr/local/lib/android/sdk/ndk/28.0.13004108
