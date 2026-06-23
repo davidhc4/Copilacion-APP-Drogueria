@@ -63,6 +63,14 @@ from kivy.uix.recycleboxlayout import RecycleBoxLayout
 from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivy.uix.recycleview.layout import LayoutSelectionBehavior
 from kivy.resources import resource_add_path
+from kivy.metrics import dp, sp
+from kivy.core.window import Window
+
+# ============================================================
+# FORZAR TAMAÑO DE VENTANA EN PC (simula un celular)
+# ============================================================
+if platform != 'android':
+    Window.size = (360, 640)
 
 # ============================================================
 # IMPORTS PARA PDF Y PERMISOS
@@ -335,7 +343,7 @@ else:
     fabricante = "Desktop"
 
 # ============================================================
-# RUTAS DE IMÁGENES (CORREGIDO PARA ANDROID)
+# RUTAS DE IMÁGENES (funciona en PC y Android)
 # ============================================================
 if platform == 'android':
     if hasattr(sys, '_MEIPASS'):
@@ -343,8 +351,9 @@ if platform == 'android':
     LOGO_PATH = './logo_farmacenter.png'
     ICONO_PATH = './icono.png'
 else:
-    LOGO_PATH = RUTA_BASE.replace('\\', '/') + '/logo_farmacender.png'
-    ICONO_PATH = RUTA_BASE.replace('\\', '/') + '/icono.png'
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    LOGO_PATH = os.path.join(BASE_DIR, 'logo_farmacenter.png').replace('\\', '/')
+    ICONO_PATH = os.path.join(BASE_DIR, 'icono.png').replace('\\', '/')
 
 CONFIG_FILE = os.path.join(RUTA_BASE, 'config.json')
 
@@ -394,7 +403,7 @@ def verificar_codigo(device_id, codigo_ingresado):
     return licencia.verificar_codigo(device_id, codigo_ingresado)
 
 # ============================================================
-# CLASE ProductoRow (para el RecycleView)
+# CLASE ProductoRow (para el RecycleView) - CORREGIDA
 # ============================================================
 class ProductoRow(BoxLayout):
     nombre = StringProperty("")
@@ -429,14 +438,15 @@ class ProductoRow(BoxLayout):
             self.catalog_screen.eliminar_producto(self.id_prod)
 
 # ============================================================
-# KV STRING CON TAMAÑOS GRANDES (como en F11)
+# KV STRING - CORREGIDO (sin sobreposiciones)
 # ============================================================
 KV_STRING = f'''
 <ProductoRow>:
     orientation: 'horizontal'
     size_hint_y: None
-    height: 180
-    padding: [10, 5]
+    height: dp(95)
+    padding: [dp(4), dp(3)]
+    spacing: dp(4)
     canvas.before:
         Color:
             rgba: (1, 1, 1, 1)
@@ -451,23 +461,22 @@ KV_STRING = f'''
 
     BoxLayout:
         orientation: 'vertical'
-        size_hint_x: 0.72
-        padding: [10, 5]
-        spacing: 2
+        size_hint_x: 0.65
+        spacing: dp(1)
         Label:
             text: root.nombre
             color: (0, 0, 0, 1)
             bold: True
-            font_size: '24sp'
+            font_size: sp(12)
             text_size: self.width, None
             halign: 'left'
             size_hint_y: None
             height: self.texture_size[1]
 
         Label:
-            text: "Lab: " + root.laboratorio + "  |  Cod: " + root.id_prod + "  |  EAN: " + root.barras
+            text: "Lab: " + root.laboratorio + "  |  Cod: " + root.id_prod
             color: (0.5, 0.5, 0.5, 1)
-            font_size: '16sp'
+            font_size: sp(9)
             text_size: self.width, None
             halign: 'left'
             size_hint_y: None
@@ -476,53 +485,68 @@ KV_STRING = f'''
         BoxLayout:
             orientation: 'horizontal'
             size_hint_y: None
-            height: 40
-            spacing: 4
+            height: dp(18)
+            spacing: dp(2)
             Label:
-                text: "Caja: " + root.precio_caja
+                text: "C:" + root.precio_caja
                 color: (0.1, 0.6, 0.1, 1)
-                bold: True
-                font_size: '18sp'
+                font_size: sp(9)
                 halign: 'left'
+                size_hint_x: 0.3
+                text_size: self.width, None
+                size_hint_y: None
+                height: self.texture_size[1]
             Label:
-                text: "Blister: " + root.precio_blister
+                text: "B:" + root.precio_blister
                 color: (0.1, 0.35, 0.65, 1)
-                font_size: '18sp'
+                font_size: sp(9)
                 halign: 'center'
+                size_hint_x: 0.3
+                text_size: self.width, None
+                size_hint_y: None
+                height: self.texture_size[1]
             Label:
-                text: "Unidad: " + root.precio_unidad
+                text: "U:" + root.precio_unidad
                 color: (0.8, 0.2, 0.1, 1)
-                font_size: '18sp'
+                font_size: sp(9)
                 halign: 'right'
+                size_hint_x: 0.3
+                text_size: self.width, None
+                size_hint_y: None
+                height: self.texture_size[1]
             Label:
                 text: root.estado
-                font_size: '18sp'
+                font_size: sp(9)
                 bold: True
                 halign: 'center'
+                size_hint_x: 0.25
+                text_size: self.width, None
+                size_hint_y: None
+                height: self.texture_size[1]
                 color: (0, 0.8, 0, 1) if root.estado == "SI HAY" else (0.8, 0, 0, 1)
 
     BoxLayout:
         orientation: 'vertical'
-        size_hint_x: 0.28
-        spacing: 2
-        padding: [2, 2]
+        size_hint_x: 0.35
+        spacing: dp(2)
+        padding: [dp(2), dp(2)]
         Button:
             text: "+"
-            size_hint_y: 0.5
+            size_hint_y: 0.45
             background_normal: ''
             background_color: (0.1, 0.6, 0.1, 1)
             color: (1, 1, 1, 1)
             bold: True
-            font_size: '32sp'
+            font_size: sp(16)
             on_press: root.agregar_al_carrito()
         Button:
             text: "🗑"
-            size_hint_y: 0.5
+            size_hint_y: 0.45
             background_normal: ''
             background_color: (0.8, 0.2, 0.1, 1)
             color: (1, 1, 1, 1)
             bold: True
-            font_size: '24sp'
+            font_size: sp(14)
             on_press: root.eliminar_producto()
 
 <ActivationScreen>:
@@ -535,8 +559,8 @@ KV_STRING = f'''
             pos: self.pos
     BoxLayout:
         orientation: 'vertical'
-        padding: [24, 40, 24, 40]
-        spacing: 20
+        padding: [dp(20), dp(30), dp(20), dp(30)]
+        spacing: dp(12)
         Image:
             source: "{LOGO_PATH}"
             allow_stretch: True
@@ -545,30 +569,32 @@ KV_STRING = f'''
             pos_hint: {{'center_x': 0.5}}
         Label:
             text: "Esta aplicación requiere activación"
-            font_size: '24sp'
+            font_size: sp(16)
             bold: True
             color: (0.1, 0.35, 0.65, 1)
-            size_hint_y: 0.08
+            size_hint_y: None
+            height: dp(35)
             halign: 'center'
         BoxLayout:
             orientation: 'vertical'
-            size_hint_y: 0.15
-            spacing: 8
+            size_hint_y: None
+            height: dp(70)
+            spacing: dp(4)
             Label:
                 text: "ID del dispositivo:"
                 color: (0.2, 0.2, 0.2, 1)
                 size_hint_y: None
-                height: 30
-                font_size: '18sp'
+                height: dp(20)
+                font_size: sp(12)
             BoxLayout:
                 orientation: 'horizontal'
-                spacing: 10
+                spacing: dp(8)
                 TextInput:
                     id: device_id_display
                     text: ""
                     readonly: True
                     multiline: False
-                    font_size: '20sp'
+                    font_size: sp(12)
                     background_color: (0.95, 0.95, 0.95, 1)
                     foreground_color: (0.1, 0.35, 0.65, 1)
                 Button:
@@ -577,45 +603,50 @@ KV_STRING = f'''
                     background_normal: ''
                     background_color: (0.1, 0.35, 0.65, 1)
                     color: (1,1,1,1)
-                    font_size: '18sp'
+                    font_size: sp(12)
                     on_press: root.copiar_id()
         TextInput:
             id: codigo_input
             hint_text: "Ingrese código de activación"
             multiline: False
-            size_hint_y: 0.08
-            padding: [12, 12]
-            font_size: '22sp'
+            size_hint_y: None
+            height: dp(38)
+            padding: [dp(10), dp(10)]
+            font_size: sp(14)
             background_color: (1,1,1,1)
             foreground_color: (0, 0, 0, 1)
         Button:
             text: "ACTIVAR"
-            size_hint_y: 0.08
+            size_hint_y: None
+            height: dp(38)
             background_normal: ''
             background_color: (0.1, 0.35, 0.65, 1)
             color: (1,1,1,1)
             bold: True
-            font_size: '22sp'
+            font_size: sp(14)
             on_press: root.activar()
         Label:
             text: "Contacte al desarrollador para obtener su código de activacion"
             color: (0.5, 0.5, 0.5, 1)
-            font_size: '16sp'
-            size_hint_y: 0.05
+            font_size: sp(10)
+            size_hint_y: None
+            height: dp(25)
             halign: 'center'
         Label:
             text: "chavezgaravitoj@gmail.com   o   rinconchavezsantiago555@gmail.com"
             color: (0.1, 0.35, 0.65, 1)
             bold: True
-            font_size: '18sp'
-            size_hint_y: 0.05
+            font_size: sp(11)
+            size_hint_y: None
+            height: dp(25)
             halign: 'center'
         Label:
             id: error_label
             text: ""
             color: (0.8, 0.2, 0.1, 1)
-            size_hint_y: 0.05
-            font_size: '18sp'
+            size_hint_y: None
+            height: dp(25)
+            font_size: sp(12)
 
 <CatalogScreen>:
     name: 'catalog'
@@ -627,10 +658,11 @@ KV_STRING = f'''
             pos: self.pos
     BoxLayout:
         orientation: 'vertical'
+        spacing: dp(2)
         BoxLayout:
             size_hint_y: None
-            height: 120
-            padding: [12, 8, 12, 6]
+            height: dp(85)
+            padding: [dp(10), dp(6), dp(10), dp(4)]
             canvas.before:
                 Color:
                     rgba: (0.1, 0.35, 0.65, 1)
@@ -644,54 +676,58 @@ KV_STRING = f'''
                 keep_ratio: True
             BoxLayout:
                 orientation: 'vertical'
-                padding: [8, 0, 0, 0]
-                spacing: 2
+                padding: [dp(6), 0, 0, 0]
+                spacing: dp(1)
                 Label:
                     text: "PRECIOS FARMACENTER"
                     color: (1, 1, 1, 1)
                     bold: True
-                    font_size: '24sp'
+                    font_size: sp(14)
                     halign: 'left'
                     text_size: self.width, None
+                    size_hint_y: None
+                    height: self.texture_size[1]
                 Label:
                     id: status_label
                     text: "Base de datos lista"
                     color: (0.9, 0.95, 1, 1)
-                    font_size: '16sp'
+                    font_size: sp(10)
                     halign: 'left'
                     text_size: self.width, None
+                    size_hint_y: None
+                    height: self.texture_size[1]
                 ProgressBar:
                     id: sync_progress
                     max: 100
                     value: 0
                     size_hint_y: None
-                    height: 4
+                    height: dp(3)
                     opacity: 0
         BoxLayout:
             size_hint_y: None
-            height: 80
-            padding: [10, 8, 10, 4]
-            spacing: 8
+            height: dp(48)
+            padding: [dp(8), dp(4), dp(8), dp(4)]
+            spacing: dp(5)
             Spinner:
                 id: search_spinner
                 text: 'NOMBRE'
                 values: ('NOMBRE', 'CÓDIGO', 'BARRAS')
                 size_hint_x: None
-                width: 110
+                width: dp(75)
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
                 bold: True
-                font_size: '18sp'
+                font_size: sp(11)
                 on_text: root.on_spinner_change(self.text)
             TextInput:
                 id: search_input
                 hint_text: "Buscar por nombre..."
                 hint_text_color: (0.6, 0.6, 0.6, 1)
                 multiline: False
-                font_size: '24sp'
+                font_size: sp(14)
                 size_hint_x: 1
-                padding: [12, 12]
+                padding: [dp(8), dp(8)]
                 background_color: (1, 1, 1, 1)
                 foreground_color: (0, 0, 0, 1)
                 cursor_color: (0.1, 0.35, 0.65, 1)
@@ -706,12 +742,12 @@ KV_STRING = f'''
             Button:
                 text: "X"
                 size_hint_x: None
-                width: 55
+                width: dp(36)
                 background_normal: ''
                 background_color: (0.4, 0.4, 0.4, 1)
                 color: (1, 1, 1, 1)
                 bold: True
-                font_size: '24sp'
+                font_size: sp(16)
                 on_press: 
                     root.ids.search_input.text = ""
                     root.on_search_text("")
@@ -719,36 +755,36 @@ KV_STRING = f'''
                 id: vender_btn
                 text: "VENDER"
                 size_hint_x: None
-                width: 100
+                width: dp(65)
                 background_normal: ''
                 background_color: (0.1, 0.6, 0.1, 1)
                 color: (1, 1, 1, 1)
                 bold: True
-                font_size: '18sp'
+                font_size: sp(11)
                 disabled: True
                 on_press: root.abrir_carrito()
         RecycleView:
             id: rv
             viewclass: 'ProductoRow'
             RecycleBoxLayout:
-                default_size: None, 180
+                default_size: None, dp(95)
                 default_size_hint: 1, None
                 size_hint_y: None
                 height: self.minimum_height
                 orientation: 'vertical'
-                spacing: 1
+                spacing: dp(1)
         BoxLayout:
             size_hint_y: None
-            height: 72
-            spacing: 8
-            padding: [10, 6, 10, 8]
+            height: dp(44)
+            spacing: dp(5)
+            padding: [dp(8), dp(4), dp(8), dp(4)]
             Button:
                 text: "SINCRONIZAR DATOS"
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
                 bold: True
-                font_size: '18sp'
+                font_size: sp(11)
                 on_press: root.sincronizar()
             Button:
                 text: "VER VENTAS"
@@ -757,7 +793,7 @@ KV_STRING = f'''
                 background_color: (0.8, 0.6, 0.1, 1)
                 color: (1, 1, 1, 1)
                 bold: True
-                font_size: '16sp'
+                font_size: sp(10)
                 on_press: root.ir_historial_ventas()
             Button:
                 text: "CAMBIAR SUCURSAL"
@@ -766,7 +802,7 @@ KV_STRING = f'''
                 background_color: (0.45, 0.45, 0.45, 1)
                 color: (1, 1, 1, 1)
                 bold: True
-                font_size: '16sp'
+                font_size: sp(10)
                 on_press: app.cambiar_sucursal()
 
 <HistorialVentasScreen>:
@@ -779,23 +815,23 @@ KV_STRING = f'''
             pos: self.pos
     BoxLayout:
         orientation: 'vertical'
-        padding: [10, 10, 10, 10]
-        spacing: 8
+        padding: [dp(8), dp(8), dp(8), dp(8)]
+        spacing: dp(4)
         BoxLayout:
             size_hint_y: None
-            height: 75
+            height: dp(40)
             Label:
                 text: "HISTORIAL DE VENTAS"
                 color: (0.1, 0.35, 0.65, 1)
                 bold: True
-                font_size: '26sp'
+                font_size: sp(16)
                 halign: 'center'
                 size_hint_y: None
-                height: 60
+                height: dp(35)
         BoxLayout:
             size_hint_y: None
-            height: 55
-            spacing: 10
+            height: dp(34)
+            spacing: dp(6)
             Spinner:
                 id: filtro_vendedor
                 text: 'TODOS'
@@ -804,7 +840,7 @@ KV_STRING = f'''
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1,1,1,1)
-                font_size: '16sp'
+                font_size: sp(10)
                 on_text: root.aplicar_filtros()
             Spinner:
                 id: filtro_periodo
@@ -814,19 +850,21 @@ KV_STRING = f'''
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1,1,1,1)
-                font_size: '16sp'
+                font_size: sp(10)
                 on_text: root.aplicar_filtros()
         BoxLayout:
             size_hint_y: None
-            height: 55
-            spacing: 10
+            height: dp(34)
+            spacing: dp(6)
             Label:
                 id: total_label
                 text: "Total: $0"
                 color: (0.1, 0.6, 0.1, 1)
                 bold: True
-                font_size: '18sp'
+                font_size: sp(12)
                 size_hint_x: 0.45
+                size_hint_y: None
+                height: dp(30)
             Button:
                 text: "📄 PDF"
                 size_hint_x: 0.2
@@ -834,7 +872,7 @@ KV_STRING = f'''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1,1,1,1)
                 bold: True
-                font_size: '16sp'
+                font_size: sp(10)
                 on_press: root.exportar_pdf()
             Button:
                 text: "CERRAR"
@@ -843,7 +881,7 @@ KV_STRING = f'''
                 background_color: (0.45, 0.45, 0.45, 1)
                 color: (1,1,1,1)
                 bold: True
-                font_size: '16sp'
+                font_size: sp(10)
                 on_press: root.cerrar_historial()
         ScrollView:
             id: scroll_ventas
@@ -852,7 +890,7 @@ KV_STRING = f'''
                 orientation: 'vertical'
                 size_hint_y: None
                 height: self.minimum_height
-                spacing: 2
+                spacing: dp(2)
 
 <SucursalSelectionScreen>:
     name: 'sucursal_selection'
@@ -864,8 +902,8 @@ KV_STRING = f'''
             pos: self.pos
     BoxLayout:
         orientation: 'vertical'
-        padding: [24, 40, 24, 40]
-        spacing: 20
+        padding: [dp(20), dp(30), dp(20), dp(30)]
+        spacing: dp(12)
         BoxLayout:
             size_hint_y: 0.25
             orientation: 'vertical'
@@ -878,63 +916,61 @@ KV_STRING = f'''
         Label:
             text: 'Sistema de consulta de precios'
             color: (0.6, 0.6, 0.6, 1)
-            font_size: '16sp'
-            size_hint_y: 0.05
+            font_size: sp(11)
+            size_hint_y: None
+            height: dp(25)
             halign: 'center'
         Label:
             text: 'Seleccione su sucursal'
-            font_size: '24sp'
+            font_size: sp(16)
             bold: True
             color: (0.1, 0.35, 0.65, 1)
-            size_hint_y: 0.08
-        Label:
-            size_hint_y: 0.02
+            size_hint_y: None
+            height: dp(32)
         GridLayout:
             cols: 1
-            spacing: 18
+            spacing: dp(8)
             size_hint_y: 0.45
             Button:
                 text: "Maíz Amarillo"
-                font_size: '22sp'
+                font_size: sp(14)
                 bold: True
                 size_hint_y: None
-                height: 65
+                height: dp(42)
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
                 on_press: app.seleccionar_sucursal('Maíz Amarillo')
             Button:
                 text: "Terranova"
-                font_size: '22sp'
+                font_size: sp(14)
                 bold: True
                 size_hint_y: None
-                height: 65
+                height: dp(42)
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
                 on_press: app.seleccionar_sucursal('Terranova')
             Button:
                 text: "Villaceleste"
-                font_size: '22sp'
+                font_size: sp(14)
                 bold: True
                 size_hint_y: None
-                height: 65
+                height: dp(42)
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
                 on_press: app.seleccionar_sucursal('Villaceleste')
             Button:
                 text: "Covipro"
-                font_size: '22sp'
+                font_size: sp(14)
                 bold: True
                 size_hint_y: None
-                height: 65
+                height: dp(42)
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
                 on_press: app.seleccionar_sucursal('Covipro')
-        Label:
-            size_hint_y: 0.1
 
 <PreSplashScreen>:
     name: 'splash'
@@ -946,7 +982,7 @@ KV_STRING = f'''
             pos: self.pos
     BoxLayout:
         orientation: 'vertical'
-        padding: 30
+        padding: dp(20)
         BoxLayout:
             size_hint_y: 0.7
             Image:
@@ -958,14 +994,16 @@ KV_STRING = f'''
             text: "Iniciando Sistema..."
             color: (0.1, 0.35, 0.65, 1)
             bold: True
-            font_size: '22sp'
-            size_hint_y: 0.1
+            font_size: sp(14)
+            size_hint_y: None
+            height: dp(35)
         Label:
             id: sucursal_label
             text: ""
             color: (0.45, 0.45, 0.45, 1)
-            font_size: '16sp'
-            size_hint_y: 0.1
+            font_size: sp(11)
+            size_hint_y: None
+            height: dp(25)
         Widget:
             size_hint_y: 0.1
 '''
@@ -974,7 +1012,7 @@ Builder.load_string(KV_STRING)
 
 
 # ============================================================
-# CLASES DE PANTALLAS
+# CLASES DE PANTALLAS (sin cambios)
 # ============================================================
 class ActivationScreen(Screen):
     def on_enter(self):
@@ -1069,7 +1107,7 @@ class HistorialVentasScreen(Screen):
         container.clear_widgets()
         
         if not ventas:
-            container.add_widget(Label(text="No hay ventas en este período", color=(0.5,0.5,0.5,1), font_size='18sp'))
+            container.add_widget(Label(text="No hay ventas en este período", color=(0.5,0.5,0.5,1), font_size=sp(12)))
             return
         
         for v in ventas:
@@ -1077,62 +1115,62 @@ class HistorialVentasScreen(Screen):
             cambio = float(v.get('cambio', 0))
             id_venta = v.get('id', '')
             
-            fila = BoxLayout(orientation='horizontal', size_hint_y=None, height=110,
-                            padding=[10, 5], spacing=5)
+            fila = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(75),
+                            padding=[dp(6), dp(3)], spacing=dp(3))
             with fila.canvas.before:
                 Color(0.95, 0.95, 0.95, 1)
                 Rectangle(pos=fila.pos, size=fila.size)
             
-            info_col = BoxLayout(orientation='vertical', size_hint_x=0.78, spacing=2)
+            info_col = BoxLayout(orientation='vertical', size_hint_x=0.78, spacing=dp(1))
             
             lbl1 = Label(text=f"{v.get('producto_nombre', '')} - {v.get('formato', '')} x{v.get('cantidad', '1')}",
-                        color=(0,0,0,1), bold=True, font_size='18sp', halign='left', size_hint_y=None, height=30)
+                        color=(0,0,0,1), bold=True, font_size=sp(12), halign='left', size_hint_y=None, height=dp(20))
             info_col.add_widget(lbl1)
             
             lbl2 = Label(text=f"Vendedor: {v.get('vendedor_nombre', '')}  |  {v.get('fecha', '')} {v.get('hora', '')}",
-                        color=(0.4,0.4,0.4,1), font_size='15sp', halign='left', size_hint_y=None, height=24)
+                        color=(0.4,0.4,0.4,1), font_size=sp(10), halign='left', size_hint_y=None, height=dp(18))
             info_col.add_widget(lbl2)
             
             lbl3 = Label(text=f"Total: ${precio_total:,.0f}  |  Recibido: ${float(v.get('dinero_recibido', 0)):,.0f}  |  Cambio: ${cambio:,.0f}",
-                        color=(0.1,0.6,0.1,1), bold=True, font_size='16sp', halign='left', size_hint_y=None, height=30)
+                        color=(0.1,0.6,0.1,1), bold=True, font_size=sp(10), halign='left', size_hint_y=None, height=dp(20))
             info_col.add_widget(lbl3)
             
             fila.add_widget(info_col)
             
             btn_eliminar = Button(text="🗑", size_hint_x=0.22, background_normal='',
-                                  background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size='24sp')
+                                  background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size=sp(16))
             btn_eliminar.bind(on_press=lambda instance, id_venta=id_venta: self.confirmar_eliminar_venta(id_venta))
             fila.add_widget(btn_eliminar)
             
             container.add_widget(fila)
     
     def confirmar_eliminar_venta(self, id_venta):
-        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        content = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
         content.add_widget(Label(text=f"¿Eliminar venta ID {id_venta} permanentemente?", 
-                                 font_size='18sp', color=(0,0,0,1)))
-        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=10)
-        btn_si = Button(text="SÍ, ELIMINAR", background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size='18sp')
-        btn_no = Button(text="CANCELAR", background_color=(0.4,0.4,0.4,1), color=(1,1,1,1), font_size='18sp')
+                                 font_size=sp(12), color=(0,0,0,1)))
+        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(34), spacing=dp(6))
+        btn_si = Button(text="SÍ, ELIMINAR", background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size=sp(12))
+        btn_no = Button(text="CANCELAR", background_color=(0.4,0.4,0.4,1), color=(1,1,1,1), font_size=sp(12))
         btn_box.add_widget(btn_si)
         btn_box.add_widget(btn_no)
         content.add_widget(btn_box)
         
         popup = Popup(title='Confirmar eliminación', content=content, 
                       size_hint=(0.8, 0.4), auto_dismiss=False,
-                      title_color=(0.8,0.2,0.1,1), title_size='20sp')
+                      title_color=(0.8,0.2,0.1,1), title_size=sp(14))
         
         def confirmar(instance):
             if eliminar_venta_por_id(id_venta):
                 popup.dismiss()
                 self.aplicar_filtros()
-                content_ok = BoxLayout(orientation='vertical', padding=10)
-                content_ok.add_widget(Label(text=f"Venta ID {id_venta} eliminada", color=(0.1,0.6,0.1,1), font_size='18sp'))
+                content_ok = BoxLayout(orientation='vertical', padding=dp(8))
+                content_ok.add_widget(Label(text=f"Venta ID {id_venta} eliminada", color=(0.1,0.6,0.1,1), font_size=sp(12)))
                 popup_ok = Popup(title='Éxito', content=content_ok, size_hint=(0.6,0.3), auto_dismiss=True)
                 popup_ok.open()
             else:
                 popup.dismiss()
-                content_err = BoxLayout(orientation='vertical', padding=10)
-                content_err.add_widget(Label(text="Error al eliminar venta", color=(0.8,0.2,0.1,1), font_size='18sp'))
+                content_err = BoxLayout(orientation='vertical', padding=dp(8))
+                content_err.add_widget(Label(text="Error al eliminar venta", color=(0.8,0.2,0.1,1), font_size=sp(12)))
                 popup_err = Popup(title='Error', content=content_err, size_hint=(0.6,0.3), auto_dismiss=True)
                 popup_err.open()
         
@@ -1142,7 +1180,7 @@ class HistorialVentasScreen(Screen):
 
     def exportar_pdf(self):
         if not PDF_DISPONIBLE:
-            popup = Popup(title='Error', content=Label(text='FPDF no está instalado en este dispositivo', font_size='18sp'),
+            popup = Popup(title='Error', content=Label(text='FPDF no está instalado en este dispositivo', font_size=sp(12)),
                          size_hint=(0.7, 0.3))
             popup.open()
             return
@@ -1169,7 +1207,7 @@ class HistorialVentasScreen(Screen):
             ventas = ventas_filtradas
         
         if not ventas:
-            popup = Popup(title='Sin datos', content=Label(text='No hay ventas para exportar', font_size='18sp'),
+            popup = Popup(title='Sin datos', content=Label(text='No hay ventas para exportar', font_size=sp(12)),
                          size_hint=(0.7, 0.3))
             popup.open()
             return
@@ -1238,9 +1276,9 @@ class HistorialVentasScreen(Screen):
             pdf.output(ruta_completa)
             
             mensaje = f"PDF guardado en:\n{ruta_completa}"
-            content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-            content.add_widget(Label(text=mensaje, halign='center', text_size=(dp(250), None), font_size='16sp'))
-            btn_ok = Button(text="OK", size_hint_y=None, height=50, font_size='18sp')
+            content = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
+            content.add_widget(Label(text=mensaje, halign='center', text_size=(dp(200), None), font_size=sp(11)))
+            btn_ok = Button(text="OK", size_hint_y=None, height=dp(34), font_size=sp(12))
             popup_exito = Popup(title='✅ Reporte generado', content=content, size_hint=(0.8, 0.5))
             btn_ok.bind(on_press=popup_exito.dismiss)
             content.add_widget(btn_ok)
@@ -1255,7 +1293,7 @@ class HistorialVentasScreen(Screen):
                     
         except Exception as e:
             logger.error(f"Error generando PDF: {e}")
-            popup = Popup(title='Error', content=Label(text=f'Error al generar PDF:\n{str(e)}', font_size='16sp'),
+            popup = Popup(title='Error', content=Label(text=f'Error al generar PDF:\n{str(e)}', font_size=sp(11)),
                          size_hint=(0.8, 0.4))
             popup.open()
     
@@ -1294,13 +1332,13 @@ class PreSplashScreen(Screen):
                 self.ids.status_label.text = "Error al cargar datos"
             if hasattr(self.ids, 'sucursal_label'):
                 self.ids.sucursal_label.text = f"Error: {error_msg[:50]}"
-            content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+            content = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
             content.add_widget(Label(
                 text=f'No se pudieron cargar los datos.\n{error_msg}\n\nRevise su conexión a internet.',
-                color=(0.1, 0.1, 0.1, 1), halign='center', font_size='16sp'))
+                color=(0.1, 0.1, 0.1, 1), halign='center', font_size=sp(11)))
             popup = Popup(title='Error de sincronización', content=content,
                          size_hint=(0.85, 0.45), title_color=(0.1, 0.35, 0.65, 1),
-                         title_size='18sp', separator_color=(0.8, 0.8, 0.8, 1))
+                         title_size=sp(14), separator_color=(0.8, 0.8, 0.8, 1))
             popup.open()
             Clock.schedule_once(lambda dt: self.ir_al_catalogo(), 3)
 
@@ -1437,19 +1475,19 @@ class CatalogScreen(Screen):
         if not id_prod:
             return
         
-        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        content = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
         content.add_widget(Label(text=f"¿Eliminar producto ID: {id_prod}?", 
-                                 font_size='18sp', color=(0,0,0,1)))
-        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=10)
-        btn_si = Button(text="SÍ, ELIMINAR", background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size='18sp')
-        btn_no = Button(text="CANCELAR", background_color=(0.4,0.4,0.4,1), color=(1,1,1,1), font_size='18sp')
+                                 font_size=sp(12), color=(0,0,0,1)))
+        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(34), spacing=dp(6))
+        btn_si = Button(text="SÍ, ELIMINAR", background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size=sp(12))
+        btn_no = Button(text="CANCELAR", background_color=(0.4,0.4,0.4,1), color=(1,1,1,1), font_size=sp(12))
         btn_box.add_widget(btn_si)
         btn_box.add_widget(btn_no)
         content.add_widget(btn_box)
         
         popup = Popup(title='Confirmar eliminación', content=content, 
                       size_hint=(0.8, 0.4), auto_dismiss=False,
-                      title_color=(0.8,0.2,0.1,1), title_size='20sp')
+                      title_color=(0.8,0.2,0.1,1), title_size=sp(14))
         
         def confirmar_eliminar(instance):
             try:
@@ -1492,21 +1530,21 @@ class CatalogScreen(Screen):
             inicializar_vendedores()
             vendedores = obtener_vendedores(app.sucursal_actual)
         
-        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        content.add_widget(Label(text="Seleccione un vendedor:", font_size='20sp', 
+        content = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
+        content.add_widget(Label(text="Seleccione un vendedor:", font_size=sp(14), 
                                  color=(0.1,0.35,0.65,1), bold=True))
         
         for v in vendedores:
             btn = Button(text=f"{v['codigo']} - {v['nombre']}", 
-                        size_hint_y=None, height=55,
+                        size_hint_y=None, height=dp(36),
                         background_normal='', background_color=(0.1,0.35,0.65,1),
-                        color=(1,1,1,1), bold=True, font_size='18sp')
+                        color=(1,1,1,1), bold=True, font_size=sp(12))
             btn.bind(on_press=lambda instance, v=v: self.seleccionar_vendedor(v))
             content.add_widget(btn)
         
         popup = Popup(title='Seleccionar Vendedor', content=content,
                      size_hint=(0.8, 0.6), auto_dismiss=False,
-                     title_color=(0.1,0.35,0.65,1), title_size='20sp',
+                     title_color=(0.1,0.35,0.65,1), title_size=sp(14),
                      separator_color=(0.8,0.8,0.8,1))
         self._popup_vendedor = popup
         popup.open()
@@ -1563,23 +1601,23 @@ class CatalogScreen(Screen):
 
     def abrir_carrito(self):
         if not self.vendedor_actual:
-            popup = Popup(title='Atención', content=Label(text='Seleccione un vendedor primero', font_size='18sp'),
+            popup = Popup(title='Atención', content=Label(text='Seleccione un vendedor primero', font_size=sp(12)),
                           size_hint=(0.7, 0.3))
             popup.open()
             return
         
         if not self.carrito:
-            popup = Popup(title='Carrito vacío', content=Label(text='Agregue productos con el botón "+"', font_size='18sp'),
+            popup = Popup(title='Carrito vacío', content=Label(text='Agregue productos con el botón "+"', font_size=sp(12)),
                           size_hint=(0.7, 0.3))
             popup.open()
             return
         
-        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        content.add_widget(Label(text="🛒 CARRITO DE COMPRAS", font_size='24sp', bold=True,
-                                 color=(0.1,0.35,0.65,1), size_hint_y=None, height=50))
+        content = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
+        content.add_widget(Label(text="🛒 CARRITO DE COMPRAS", font_size=sp(16), bold=True,
+                                 color=(0.1,0.35,0.65,1), size_hint_y=None, height=dp(30)))
         
         scroll = ScrollView()
-        lista_box = BoxLayout(orientation='vertical', size_hint_y=None, spacing=5)
+        lista_box = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(3))
         lista_box.bind(minimum_height=lista_box.setter('height'))
         
         total_venta = 0
@@ -1592,43 +1630,43 @@ class CatalogScreen(Screen):
             subtotal = precio_unitario * cantidad
             total_venta += subtotal
             
-            fila = BoxLayout(orientation='vertical', size_hint_y=None, height=140,
-                            padding=[5,5], spacing=2)
+            fila = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(85),
+                            padding=[dp(3),dp(3)], spacing=dp(1))
             with fila.canvas.before:
                 Color(0.95, 0.95, 0.95, 1)
                 Rectangle(pos=fila.pos, size=fila.size)
             
-            lbl_nombre = Label(text=f"{producto['nombre'][:30]}", bold=True, font_size='18sp',
-                               color=(0,0,0,1), halign='left', size_hint_y=None, height=32)
+            lbl_nombre = Label(text=f"{producto['nombre'][:30]}", bold=True, font_size=sp(12),
+                               color=(0,0,0,1), halign='left', size_hint_y=None, height=dp(20))
             fila.add_widget(lbl_nombre)
             
-            controles = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=5)
+            controles = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(30), spacing=dp(3))
             
             spinner_formato = Spinner(text=formato, values=('Unidad', 'Blister', 'Caja'),
                                       background_normal='', background_color=(0.1,0.35,0.65,1),
-                                      color=(1,1,1,1), font_size='16sp', size_hint_x=0.3)
+                                      color=(1,1,1,1), font_size=sp(10), size_hint_x=0.3)
             spinner_formato.bind(text=lambda instance, val, i=idx: self.cambiar_formato_carrito(i, val))
             controles.add_widget(spinner_formato)
             
-            caja_cantidad = BoxLayout(orientation='horizontal', size_hint_x=0.3, spacing=2)
+            caja_cantidad = BoxLayout(orientation='horizontal', size_hint_x=0.3, spacing=dp(2))
             btn_menos = Button(text="-", size_hint_x=0.3, background_normal='',
-                              background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size='22sp')
+                              background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size=sp(14))
             btn_menos.bind(on_press=lambda instance, i=idx: self.cambiar_cantidad_carrito(i, -1))
-            txt_cant = Label(text=str(cantidad), font_size='18sp', bold=True, color=(0,0,0,1), size_hint_x=0.4)
+            txt_cant = Label(text=str(cantidad), font_size=sp(12), bold=True, color=(0,0,0,1), size_hint_x=0.4)
             btn_mas = Button(text="+", size_hint_x=0.3, background_normal='',
-                             background_color=(0.1,0.6,0.1,1), color=(1,1,1,1), font_size='22sp')
+                             background_color=(0.1,0.6,0.1,1), color=(1,1,1,1), font_size=sp(14))
             btn_mas.bind(on_press=lambda instance, i=idx: self.cambiar_cantidad_carrito(i, 1))
             caja_cantidad.add_widget(btn_menos)
             caja_cantidad.add_widget(txt_cant)
             caja_cantidad.add_widget(btn_mas)
             controles.add_widget(caja_cantidad)
             
-            lbl_subtotal = Label(text=f"${subtotal:,.0f}", font_size='18sp', bold=True,
+            lbl_subtotal = Label(text=f"${subtotal:,.0f}", font_size=sp(12), bold=True,
                                  color=(0.1,0.6,0.1,1), size_hint_x=0.3, halign='right')
             controles.add_widget(lbl_subtotal)
             
             btn_eliminar = Button(text="X", size_hint_x=0.1, background_normal='',
-                                  background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size='18sp')
+                                  background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size=sp(12))
             btn_eliminar.bind(on_press=lambda instance, i=idx: self.eliminar_del_carrito(i))
             controles.add_widget(btn_eliminar)
             
@@ -1638,19 +1676,19 @@ class CatalogScreen(Screen):
         scroll.add_widget(lista_box)
         content.add_widget(scroll)
         
-        total_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=60, spacing=10)
-        total_box.add_widget(Label(text=f"TOTAL: ${total_venta:,.0f}", font_size='24sp', bold=True,
+        total_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(34), spacing=dp(6))
+        total_box.add_widget(Label(text=f"TOTAL: ${total_venta:,.0f}", font_size=sp(14), bold=True,
                                    color=(0.1,0.35,0.65,1), size_hint_x=0.6))
         
         btn_pagar = Button(text="PAGAR", background_normal='', background_color=(0.1,0.6,0.1,1),
-                          color=(1,1,1,1), bold=True, font_size='20sp', size_hint_x=0.4)
+                          color=(1,1,1,1), bold=True, font_size=sp(12), size_hint_x=0.4)
         btn_pagar.bind(on_press=lambda instance: self.procesar_pago(total_venta))
         total_box.add_widget(btn_pagar)
         content.add_widget(total_box)
         
-        btn_cerrar = Button(text="CERRAR CARRITO", size_hint_y=None, height=55,
+        btn_cerrar = Button(text="CERRAR CARRITO", size_hint_y=None, height=dp(34),
                             background_normal='', background_color=(0.45,0.45,0.45,1),
-                            color=(1,1,1,1), bold=True, font_size='18sp')
+                            color=(1,1,1,1), bold=True, font_size=sp(12))
         btn_cerrar.bind(on_press=lambda instance: self.carrito_popup.dismiss())
         content.add_widget(btn_cerrar)
         
@@ -1683,39 +1721,39 @@ class CatalogScreen(Screen):
         if self.carrito_popup:
             self.carrito_popup.dismiss()
         
-        content = BoxLayout(orientation='vertical', padding=15, spacing=10)
-        content.add_widget(Label(text=f"Total a pagar: ${total_venta:,.0f}", font_size='24sp',
-                                 bold=True, color=(0.1,0.35,0.65,1), size_hint_y=None, height=50))
+        content = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(6))
+        content.add_widget(Label(text=f"Total a pagar: ${total_venta:,.0f}", font_size=sp(16),
+                                 bold=True, color=(0.1,0.35,0.65,1), size_hint_y=None, height=dp(34)))
         
-        dinero_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=65, spacing=10)
-        dinero_box.add_widget(Label(text="Dinero recibido:", font_size='20sp', size_hint_x=0.5))
-        txt_dinero = TextInput(text="0", font_size='22sp', multiline=False, input_filter='float',
-                               size_hint_x=0.5, padding=[10,8],
+        dinero_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(38), spacing=dp(6))
+        dinero_box.add_widget(Label(text="Dinero recibido:", font_size=sp(12), size_hint_x=0.5))
+        txt_dinero = TextInput(text="0", font_size=sp(14), multiline=False, input_filter='float',
+                               size_hint_x=0.5, padding=[dp(6),dp(4)],
                                background_color=(0.95,0.95,0.95,1), foreground_color=(0,0,0,1))
         dinero_box.add_widget(txt_dinero)
         content.add_widget(dinero_box)
         
-        lbl_cambio = Label(text="Cambio: $0", font_size='20sp', bold=True,
-                          color=(0.8,0.2,0.1,1), size_hint_y=None, height=50)
+        lbl_cambio = Label(text="Cambio: $0", font_size=sp(14), bold=True,
+                          color=(0.8,0.2,0.1,1), size_hint_y=None, height=dp(30))
         content.add_widget(lbl_cambio)
         
-        lbl_error = Label(text="", color=(0.8,0.2,0.1,1), font_size='16sp', size_hint_y=None, height=32)
+        lbl_error = Label(text="", color=(0.8,0.2,0.1,1), font_size=sp(10), size_hint_y=None, height=dp(20))
         content.add_widget(lbl_error)
         
-        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=65, spacing=10)
+        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(38), spacing=dp(6))
         btn_confirmar = Button(text="CONFIRMAR VENTA", background_normal='',
                                background_color=(0.1,0.6,0.1,1), color=(1,1,1,1),
-                               bold=True, font_size='20sp')
+                               bold=True, font_size=sp(12))
         btn_cancelar = Button(text="CANCELAR", background_normal='',
                               background_color=(0.6,0.2,0.1,1), color=(1,1,1,1),
-                              bold=True, font_size='18sp')
+                              bold=True, font_size=sp(12))
         btn_box.add_widget(btn_confirmar)
         btn_box.add_widget(btn_cancelar)
         content.add_widget(btn_box)
         
         popup_pago = Popup(title='Confirmar Pago', content=content,
-                           size_hint=(0.85, 0.5), title_color=(0.1,0.35,0.65,1),
-                           title_size='20sp', separator_color=(0.8,0.8,0.8,1),
+                           size_hint=(0.85, 0.45), title_color=(0.1,0.35,0.65,1),
+                           title_size=sp(14), separator_color=(0.8,0.8,0.8,1),
                            auto_dismiss=False)
         
         def calcular_cambio(*args):
@@ -1770,14 +1808,14 @@ class CatalogScreen(Screen):
             self.actualizar_boton_vender()
             popup_pago.dismiss()
             
-            content_confirm = BoxLayout(orientation='vertical', padding=10, spacing=10)
+            content_confirm = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
             content_confirm.add_widget(Label(text="✅ Venta registrada exitosamente!", 
-                                            font_size='20sp', color=(0.1,0.6,0.1,1), bold=True))
+                                            font_size=sp(14), color=(0.1,0.6,0.1,1), bold=True))
             content_confirm.add_widget(Label(text=f"Total: ${total_venta:,.0f}  |  Cambio: ${cambio:,.0f}",
-                                            font_size='18sp', color=(0.1,0.35,0.65,1)))
+                                            font_size=sp(12), color=(0.1,0.35,0.65,1)))
             popup_confirm = Popup(title='Éxito', content=content_confirm,
                                  size_hint=(0.7, 0.3), auto_dismiss=True,
-                                 title_color=(0.1,0.6,0.1,1), title_size='20sp')
+                                 title_color=(0.1,0.6,0.1,1), title_size=sp(14))
             popup_confirm.open()
             Clock.schedule_once(lambda dt: popup_confirm.dismiss(), 2)
         
