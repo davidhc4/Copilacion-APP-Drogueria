@@ -1,7 +1,7 @@
 [app]
 
 # (str) Title of your application
-title = Precios Farmacenter
+title = Precios Droguerias
 
 # (str) Package name
 package.name = preciosfarmacenter
@@ -16,7 +16,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db,csv
 
 # (str) Application versioning (method 1)
-version = 2.9.9
+version = 3.5.5
 
 # (list) Application requirements
 # SIN CYTHON para evitar problemas con Python 3.14
