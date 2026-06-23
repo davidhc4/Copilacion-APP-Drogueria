@@ -51,11 +51,7 @@ from kivy.uix.recycleview.layout import LayoutSelectionBehavior
 # IMPORTS PARA PDF Y PERMISOS
 # ============================================================
 try:
-    from reportlab.lib.pagesizes import letter
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
+    from fpdf import FPDF
     PDF_DISPONIBLE = True
 except ImportError:
     PDF_DISPONIBLE = False
@@ -1115,9 +1111,12 @@ class HistorialVentasScreen(Screen):
         btn_no.bind(on_press=popup.dismiss)
         popup.open()
 
+    # ============================================================
+    # EXPORTAR PDF CON FPDF2
+    # ============================================================
     def exportar_pdf(self):
         if not PDF_DISPONIBLE:
-            popup = Popup(title='Error', content=Label(text='ReportLab no está instalado en este dispositivo'),
+            popup = Popup(title='Error', content=Label(text='FPDF no está instalado en este dispositivo'),
                          size_hint=(0.7, 0.3))
             popup.open()
             return
@@ -1126,6 +1125,7 @@ class HistorialVentasScreen(Screen):
         if not app.sucursal_actual:
             return
         
+        # Obtener las ventas actuales según los filtros
         filtro_vendedor = self.ids.filtro_vendedor.text
         filtro_periodo = self.ids.filtro_periodo.text
         fecha_inicio, fecha_fin = self._calcular_fechas(filtro_periodo)
@@ -1149,6 +1149,7 @@ class HistorialVentasScreen(Screen):
             popup.open()
             return
         
+        # Definir ruta de guardado
         if platform == 'android':
             try:
                 request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
@@ -1168,54 +1169,58 @@ class HistorialVentasScreen(Screen):
         ruta_completa = os.path.join(ruta_guardado, nombre_archivo)
         
         try:
-            doc = SimpleDocTemplate(ruta_completa, pagesize=letter)
-            styles = getSampleStyleSheet()
-            elementos = []
+            # Crear PDF con fpdf2
+            pdf = FPDF(orientation='P', unit='mm', format='A4')
+            pdf.add_page()
             
-            titulo = Paragraph("REPORTE DE VENTAS", styles['Title'])
-            elementos.append(titulo)
-            elementos.append(Spacer(1, 0.25*inch))
+            # Título
+            pdf.set_font('Arial', 'B', 16)
+            pdf.cell(0, 10, 'REPORTE DE VENTAS', ln=True, align='C')
+            pdf.ln(5)
             
-            info_texto = f"Sucursal: {app.sucursal_actual} | Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-            info_style = ParagraphStyle('info', parent=styles['Normal'], fontSize=10)
-            elementos.append(Paragraph(info_texto, info_style))
-            elementos.append(Spacer(1, 0.25*inch))
+            # Información de la sucursal y fecha
+            pdf.set_font('Arial', '', 10)
+            pdf.cell(0, 8, f"Sucursal: {app.sucursal_actual} | Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align='C')
+            pdf.ln(5)
             
-            datos_tabla = [["Producto", "Cant.", "Precio Unit.", "Total"]]
+            # Cabecera de la tabla
+            pdf.set_font('Arial', 'B', 9)
+            col_widths = [90, 20, 30, 30]  # Producto, Cant, Precio Unit, Total
+            pdf.cell(col_widths[0], 8, 'Producto', border=1)
+            pdf.cell(col_widths[1], 8, 'Cant.', border=1, align='C')
+            pdf.cell(col_widths[2], 8, 'Precio Unit.', border=1, align='C')
+            pdf.cell(col_widths[3], 8, 'Total', border=1, align='C')
+            pdf.ln()
+            
+            # Filas de la tabla
+            pdf.set_font('Arial', '', 8)
             total_general = 0
             
             for v in ventas:
                 try:
-                    producto = v.get('producto_nombre', 'Desconocido')
+                    producto = v.get('producto_nombre', 'Desconocido')[:30]
                     cantidad = str(v.get('cantidad', 0))
                     precio_unitario = f"${float(v.get('precio_unitario', 0)):,.0f}"
                     total = float(v.get('precio_total', 0))
                     total_general += total
-                    datos_tabla.append([producto, cantidad, precio_unitario, f"${total:,.0f}"])
+                    
+                    pdf.cell(col_widths[0], 7, producto, border=1)
+                    pdf.cell(col_widths[1], 7, cantidad, border=1, align='C')
+                    pdf.cell(col_widths[2], 7, precio_unitario, border=1, align='R')
+                    pdf.cell(col_widths[3], 7, f"${total:,.0f}", border=1, align='R')
+                    pdf.ln()
                 except:
                     pass
             
-            datos_tabla.append(["TOTAL", "", "", f"${total_general:,.0f}"])
+            # Fila de total general
+            pdf.set_font('Arial', 'B', 9)
+            pdf.cell(col_widths[0] + col_widths[1] + col_widths[2], 8, 'TOTAL GENERAL', border=1, align='R')
+            pdf.cell(col_widths[3], 8, f"${total_general:,.0f}", border=1, align='R')
             
-            tabla = Table(datos_tabla, colWidths=[2.5*inch, 0.8*inch, 0.8*inch, 0.8*inch])
-            tabla.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ]))
-            elementos.append(tabla)
+            # Guardar PDF
+            pdf.output(ruta_completa)
             
-            total_style = ParagraphStyle('total', parent=styles['Normal'], fontSize=12, fontName='Helvetica-Bold')
-            elementos.append(Spacer(1, 0.25*inch))
-            elementos.append(Paragraph(f"Total General: ${total_general:,.0f}", total_style))
-            
-            doc.build(elementos)
-            
+            # Mostrar mensaje de éxito
             mensaje = f"PDF guardado en:\n{ruta_completa}"
             content = BoxLayout(orientation='vertical', padding=10, spacing=10)
             content.add_widget(Label(text=mensaje, halign='center', text_size=(dp(250), None)))
@@ -1225,6 +1230,7 @@ class HistorialVentasScreen(Screen):
             content.add_widget(btn_ok)
             popup_exito.open()
             
+            # Intentar abrir el PDF en Android
             if platform == 'android':
                 try:
                     from android import intent
