@@ -20,7 +20,7 @@ version = 2.9.9
 
 # (list) Application requirements
 # SIN CYTHON para evitar problemas con Python 3.14
-requirements = python3,kivy==2.3.1,requests,certifi
+requirements = python3,kivy==2.3.1,requests,certifi,reportlab
 
 # (str) Python version to use (android only)
 android.python_version = 3.13
@@ -42,7 +42,7 @@ fullscreen = 0
 #
 
 # (list) Permissions
-android.permissions = INTERNET, ACCESS_NETWORK_STATE
+android.permissions = INTERNET, ACCESS_NETWORK_STATE, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
 
 # (int) Target Android API, should be as high as possible.
 android.api = 33
