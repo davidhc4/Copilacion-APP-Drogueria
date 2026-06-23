@@ -6,21 +6,6 @@
 ================================================================================
                                   DERECHOS RESERVADOS
                                         © 2026
-
-DESARROLLADORES:
-    • Santiago Rincón Chávez      - rinconchavezsantiago555@gmail.com
-    • Juan David Chávez Garavito  - chavezgaravitoj@gmail.com
-
-LICENCIA:
-    Este software es propiedad intelectual de sus desarrolladores.
-    Queda prohibida la reproducción, distribución, modificación o uso
-    no autorizado sin el consentimiento expreso de los titulares.
-
-INFORMACIÓN TÉCNICA:
-    Versión: 2.8.0  |  Lanzamiento: 2026  |  Plataforma: Android
-
-SOPORTE:
-    Contacte a los desarrolladores para soporte técnico o solicitud de licencias.
 ================================================================================
 """
 
@@ -61,6 +46,26 @@ from kivy.uix.recycleview import RecycleView
 from kivy.uix.recycleboxlayout import RecycleBoxLayout
 from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivy.uix.recycleview.layout import LayoutSelectionBehavior
+
+# ============================================================
+# IMPORTS PARA PDF Y PERMISOS
+# ============================================================
+try:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    PDF_DISPONIBLE = True
+except ImportError:
+    PDF_DISPONIBLE = False
+
+if platform == 'android':
+    from android.permissions import request_permissions, Permission
+    try:
+        from android.storage import primary_external_storage_path
+    except:
+        primary_external_storage_path = None
 
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO)
@@ -116,19 +121,10 @@ VENDEDORES_POR_SUCURSAL = {
         ('09', 'MAGDA BETHSY PINILLA'),
         ('01', 'VENDEDOR GENERAL'),
     ],
-    # "Terranova": [...],
-    # "Covipro": [...],
 }
 
 def inicializar_vendedores():
-    """
-    Crea o actualiza el archivo vendedores.csv con todos los vendedores
-    de todas las sucursales definidas en VENDEDORES_POR_SUCURSAL.
-    Si el archivo ya existe, solo agrega los vendedores que falten.
-    """
     ruta = get_csv_vendedores()
-    
-    # Leer vendedores existentes (si el archivo existe)
     existentes = set()
     if os.path.exists(ruta):
         with open(ruta, 'r', encoding='utf-8') as f:
@@ -136,14 +132,12 @@ def inicializar_vendedores():
             for row in reader:
                 existentes.add((row['codigo'], row['sucursal']))
     
-    # Recorrer todas las sucursales y vendedores definidos
     nuevos = []
     for sucursal, vendedores in VENDEDORES_POR_SUCURSAL.items():
         for codigo, nombre in vendedores:
             if (codigo, sucursal) not in existentes:
                 nuevos.append((codigo, nombre, sucursal))
     
-    # Si hay nuevos vendedores, agregarlos al archivo
     if nuevos:
         if not os.path.exists(ruta):
             with open(ruta, 'w', newline='', encoding='utf-8') as f:
@@ -156,7 +150,6 @@ def inicializar_vendedores():
                 writer.writerow([codigo, nombre, sucursal])
                 logger.info(f"Vendedor agregado: {codigo} - {nombre} ({sucursal})")
     
-    # Si el archivo no existe (por alguna razón), crearlo con todos
     if not os.path.exists(ruta):
         with open(ruta, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
@@ -248,11 +241,39 @@ def calcular_total_ventas(ventas):
             pass
     return total
 
-# ============================================================
-# FIN FUNCIONES CSV
-# ============================================================
+def eliminar_venta_por_id(id_venta):
+    ruta = get_csv_ventas()
+    if not os.path.exists(ruta):
+        return False
+    
+    with open(ruta, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        filas = list(reader)
+    
+    id_str = str(id_venta)
+    encontrado = False
+    nuevas_filas = []
+    for fila in filas:
+        if fila and fila[0] == id_str:
+            encontrado = True
+            continue
+        nuevas_filas.append(fila)
+    
+    if not encontrado:
+        return False
+    
+    with open(ruta, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(nuevas_filas)
+    
+    logger.info(f"Venta ID {id_venta} eliminada.")
+    return True
 
-# --- SUCURSALES ---
+# ============================================================
+# SUCURSALES
+# ============================================================
 SUCURSALES = {
     "Maíz Amarillo": {
         "url_ofuscada": "DhdGRhVZHRkFDF1GDwdAWQECQVkUBAEAU05fT0gQWlcUBkJZDw1GGAUMXxlcGwgZAUxCUxQQXVgHDx1SFAxVaRUGQEAfPEJeBxFfVzkAXVkWClZECQRTRTkMQFFJKmNyUzNRbDMJBFcpMnkECgZ6c1QBawUzImtzIltZGx8aV18nG2hcMSZjQRRTV2NZBg8GNQJ2DzVFVlkRDV5ZBwcPBw==",
@@ -276,7 +297,9 @@ SUCURSALES = {
     }
 }
 
-# --- RUTAS ---
+# ============================================================
+# RUTAS
+# ============================================================
 if platform == 'android':
     from android.storage import app_storage_path
     from jnius import autoclass
@@ -302,7 +325,41 @@ LOGO_PATH = RUTA_BASE.replace('\\', '/') + '/logo_farmacenter.png'
 ICONO_PATH = RUTA_BASE.replace('\\', '/') + '/icono.png'
 CONFIG_FILE = os.path.join(RUTA_BASE, 'config.json')
 
-# --- FUNCIONES DE LICENCIA ---
+# ============================================================
+# LICENCIA: GUARDAR Y CARGAR
+# ============================================================
+ARCHIVO_LICENCIA = os.path.join(RUTA_BASE, 'licencia.json')
+
+def guardar_licencia(device_id, codigo):
+    try:
+        datos = {
+            'device_id': device_id,
+            'codigo': codigo,
+            'activada': True,
+            'fecha': datetime.now().strftime("%d/%m/%Y %H:%M")
+        }
+        with open(ARCHIVO_LICENCIA, 'w', encoding='utf-8') as f:
+            json.dump(datos, f)
+        logger.info("Licencia guardada correctamente.")
+        return True
+    except Exception as e:
+        logger.error(f"Error guardando licencia: {e}")
+        return False
+
+def cargar_licencia():
+    if os.path.exists(ARCHIVO_LICENCIA):
+        try:
+            with open(ARCHIVO_LICENCIA, 'r', encoding='utf-8') as f:
+                datos = json.load(f)
+                if datos.get('activada', False):
+                    return datos.get('codigo')
+        except Exception as e:
+            logger.error(f"Error cargando licencia: {e}")
+    return None
+
+# ============================================================
+# FUNCIONES DE LICENCIA (device_id)
+# ============================================================
 def generar_device_id():
     if platform == 'android':
         base = f"{android_id}_{modelo}_{fabricante}"
@@ -313,7 +370,9 @@ def generar_device_id():
 def verificar_codigo(device_id, codigo_ingresado):
     return licencia.verificar_codigo(device_id, codigo_ingresado)
 
-# --- CLASE PARA EL RECYCLEVIEW DE PRODUCTOS CON BOTÓN AGREGAR ---
+# ============================================================
+# CLASE ProductoRow (para el RecycleView)
+# ============================================================
 class ProductoRow(BoxLayout):
     nombre = StringProperty("")
     laboratorio = StringProperty("")
@@ -322,6 +381,7 @@ class ProductoRow(BoxLayout):
     precio_caja = StringProperty("")
     precio_blister = StringProperty("")
     precio_unidad = StringProperty("")
+    estado = StringProperty("SI HAY")
     catalog_screen = ObjectProperty(None)
 
     def agregar_al_carrito(self):
@@ -341,15 +401,18 @@ class ProductoRow(BoxLayout):
                               size_hint=(0.7,0.3))
                 popup.open()
 
-# --- KV STRING COMPLETO ---
-KV_STRING = f'''
-<RootWidget>:
-    # No se usa, solo para referencia
+    def eliminar_producto(self):
+        if self.catalog_screen:
+            self.catalog_screen.eliminar_producto(self.id_prod)
 
+# ============================================================
+# KV STRING CORREGIDO (ELIMINADO <RootWidget>)
+# ============================================================
+KV_STRING = f'''
 <ProductoRow>:
     orientation: 'horizontal'
     size_hint_y: None
-    height: 135
+    height: 150
     padding: [10, 5]
     canvas.before:
         Color:
@@ -365,7 +428,7 @@ KV_STRING = f'''
 
     BoxLayout:
         orientation: 'vertical'
-        size_hint_x: 0.85
+        size_hint_x: 0.78
         padding: [10, 5]
         spacing: 2
         Label:
@@ -391,33 +454,53 @@ KV_STRING = f'''
             orientation: 'horizontal'
             size_hint_y: None
             height: 30
-            spacing: 8
+            spacing: 4
             Label:
                 text: "Caja: " + root.precio_caja
                 color: (0.1, 0.6, 0.1, 1)
                 bold: True
-                font_size: 13
+                font_size: 12
                 halign: 'left'
             Label:
                 text: "Blister: " + root.precio_blister
                 color: (0.1, 0.35, 0.65, 1)
-                font_size: 13
+                font_size: 12
                 halign: 'center'
             Label:
                 text: "Unidad: " + root.precio_unidad
                 color: (0.8, 0.2, 0.1, 1)
-                font_size: 13
+                font_size: 12
                 halign: 'right'
+            Label:
+                text: root.estado
+                font_size: 12
+                bold: True
+                halign: 'center'
+                color: (0, 0.8, 0, 1) if root.estado == "SI HAY" else (0.8, 0, 0, 1)
 
-    Button:
-        text: "+"
-        size_hint_x: 0.15
-        background_normal: ''
-        background_color: (0.1, 0.6, 0.1, 1)
-        color: (1, 1, 1, 1)
-        bold: True
-        font_size: 24
-        on_press: root.agregar_al_carrito()
+    BoxLayout:
+        orientation: 'vertical'
+        size_hint_x: 0.22
+        spacing: 2
+        padding: [2, 2]
+        Button:
+            text: "+"
+            size_hint_y: 0.5
+            background_normal: ''
+            background_color: (0.1, 0.6, 0.1, 1)
+            color: (1, 1, 1, 1)
+            bold: True
+            font_size: 24
+            on_press: root.agregar_al_carrito()
+        Button:
+            text: "🗑"
+            size_hint_y: 0.5
+            background_normal: ''
+            background_color: (0.8, 0.2, 0.1, 1)
+            color: (1, 1, 1, 1)
+            bold: True
+            font_size: 18
+            on_press: root.eliminar_producto()
 
 <ActivationScreen>:
     name: 'activation'
@@ -516,10 +599,8 @@ KV_STRING = f'''
         Rectangle:
             size: self.size
             pos: self.pos
-
     BoxLayout:
         orientation: 'vertical'
-
         BoxLayout:
             size_hint_y: None
             height: 95
@@ -560,13 +641,11 @@ KV_STRING = f'''
                     size_hint_y: None
                     height: 4
                     opacity: 0
-
         BoxLayout:
             size_hint_y: None
             height: 64
             padding: [10, 8, 10, 4]
             spacing: 8
-
             Spinner:
                 id: search_spinner
                 text: 'NOMBRE'
@@ -579,7 +658,6 @@ KV_STRING = f'''
                 bold: True
                 font_size: 14
                 on_text: root.on_spinner_change(self.text)
-
             TextInput:
                 id: search_input
                 hint_text: "Buscar por nombre..."
@@ -599,7 +677,6 @@ KV_STRING = f'''
                     Line:
                         rounded_rectangle: (self.x, self.y, self.width, self.height, 6)
                         width: 1.2
-
             Button:
                 text: "X"
                 size_hint_x: None
@@ -612,7 +689,6 @@ KV_STRING = f'''
                 on_press: 
                     root.ids.search_input.text = ""
                     root.on_search_text("")
-
             Button:
                 id: vender_btn
                 text: "VENDER"
@@ -625,18 +701,16 @@ KV_STRING = f'''
                 font_size: 14
                 disabled: True
                 on_press: root.abrir_carrito()
-
         RecycleView:
             id: rv
             viewclass: 'ProductoRow'
             RecycleBoxLayout:
-                default_size: None, 135
+                default_size: None, 150
                 default_size_hint: 1, None
                 size_hint_y: None
                 height: self.minimum_height
                 orientation: 'vertical'
                 spacing: 1
-
         BoxLayout:
             size_hint_y: None
             height: 58
@@ -681,7 +755,6 @@ KV_STRING = f'''
         orientation: 'vertical'
         padding: [10, 10, 10, 10]
         spacing: 8
-        
         BoxLayout:
             size_hint_y: None
             height: 60
@@ -693,7 +766,6 @@ KV_STRING = f'''
                 halign: 'center'
                 size_hint_y: None
                 height: 50
-                
         BoxLayout:
             size_hint_y: None
             height: 45
@@ -718,10 +790,9 @@ KV_STRING = f'''
                 color: (1,1,1,1)
                 font_size: 12
                 on_text: root.aplicar_filtros()
-                
         BoxLayout:
             size_hint_y: None
-            height: 35
+            height: 45
             spacing: 10
             Label:
                 id: total_label
@@ -729,6 +800,16 @@ KV_STRING = f'''
                 color: (0.1, 0.6, 0.1, 1)
                 bold: True
                 font_size: 14
+                size_hint_x: 0.45
+            Button:
+                text: "📄 PDF"
+                size_hint_x: 0.2
+                background_normal: ''
+                background_color: (0.1, 0.35, 0.65, 1)
+                color: (1,1,1,1)
+                bold: True
+                font_size: 12
+                on_press: root.exportar_pdf()
             Button:
                 text: "CERRAR"
                 size_hint_x: 0.2
@@ -738,7 +819,6 @@ KV_STRING = f'''
                 bold: True
                 font_size: 12
                 on_press: root.cerrar_historial()
-                
         ScrollView:
             id: scroll_ventas
             BoxLayout:
@@ -747,148 +827,6 @@ KV_STRING = f'''
                 size_hint_y: None
                 height: self.minimum_height
                 spacing: 2
-
-<PinScreen>:
-    name: 'pin'
-    canvas.before:
-        Color:
-            rgba: (1, 1, 1, 1)
-        Rectangle:
-            size: self.size
-            pos: self.pos
-    BoxLayout:
-        orientation: 'vertical'
-        padding: [24, 40, 24, 40]
-        spacing: 20
-        Image:
-            source: "{LOGO_PATH}"
-            allow_stretch: True
-            keep_ratio: True
-            size_hint: (0.5, 0.2)
-            pos_hint: {{'center_x': 0.5}}
-        Label:
-            id: title_label
-            text: "Ingrese su PIN"
-            font_size: 20
-            bold: True
-            color: (0.1, 0.35, 0.65, 1)
-            size_hint_y: 0.08
-            halign: 'center'
-        BoxLayout:
-            id: circles_box
-            size_hint_y: 0.1
-            spacing: 20
-            pos_hint: {{'center_x': 0.5}}
-        Label:
-            id: error_label
-            text: ""
-            color: (0.8, 0.2, 0.1, 1)
-            font_size: 12
-            size_hint_y: 0.05
-            halign: 'center'
-        GridLayout:
-            cols: 3
-            rows: 4
-            spacing: 10
-            size_hint_y: 0.45
-            Button:
-                text: "1"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("1")
-            Button:
-                text: "2"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("2")
-            Button:
-                text: "3"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("3")
-            Button:
-                text: "4"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("4")
-            Button:
-                text: "5"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("5")
-            Button:
-                text: "6"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("6")
-            Button:
-                text: "7"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("7")
-            Button:
-                text: "8"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("8")
-            Button:
-                text: "9"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("9")
-            Button:
-                text: ""
-                disabled: True
-                background_color: (0.9, 0.9, 0.9, 1)
-            Button:
-                text: "0"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.1, 0.35, 0.65, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.agregar_digito("0")
-            Button:
-                text: "🗑"
-                font_size: 28
-                bold: True
-                background_normal: ''
-                background_color: (0.45, 0.45, 0.45, 1)
-                color: (1, 1, 1, 1)
-                on_press: root.borrar_digito()
-        Label:
-            id: countdown_label
-            text: ""
-            size_hint_y: 0.05
-            color: (0.1, 0.35, 0.65, 1)
-            font_size: 12
 
 <SucursalSelectionScreen>:
     name: 'sucursal_selection'
@@ -1009,9 +947,12 @@ KV_STRING = f'''
 Builder.load_string(KV_STRING)
 
 
-# --- CLASES DE PANTALLAS ---
+# ============================================================
+# CLASES DE PANTALLAS
+# ============================================================
 class ActivationScreen(Screen):
     def on_enter(self):
+        # No hacemos redirección aquí porque se maneja en build()
         app = App.get_running_app()
         if app.device_id is None:
             app.device_id = generar_device_id()
@@ -1028,9 +969,10 @@ class ActivationScreen(Screen):
         app = App.get_running_app()
         codigo = self.ids.codigo_input.text.strip().upper()
         if verificar_codigo(app.device_id, codigo):
+            guardar_licencia(app.device_id, codigo)
             app.activated = True
             app.guardar_configuracion_completa()
-            app.root.current = 'pin'
+            self.manager.current = 'sucursal_selection'
         else:
             self.ids.error_label.text = "Código incorrecto. Verifique e intente nuevamente."
 
@@ -1108,148 +1050,197 @@ class HistorialVentasScreen(Screen):
         for v in ventas:
             precio_total = float(v.get('precio_total', 0))
             cambio = float(v.get('cambio', 0))
+            id_venta = v.get('id', '')
             
-            fila = BoxLayout(orientation='vertical', size_hint_y=None, height=90,
-                            padding=[10, 5])
+            fila = BoxLayout(orientation='horizontal', size_hint_y=None, height=90,
+                            padding=[10, 5], spacing=5)
             with fila.canvas.before:
                 Color(0.95, 0.95, 0.95, 1)
                 Rectangle(pos=fila.pos, size=fila.size)
             
+            info_col = BoxLayout(orientation='vertical', size_hint_x=0.8, spacing=2)
+            
             lbl1 = Label(text=f"{v.get('producto_nombre', '')} - {v.get('formato', '')} x{v.get('cantidad', '1')}",
                         color=(0,0,0,1), bold=True, font_size=14, halign='left', size_hint_y=None, height=25)
-            fila.add_widget(lbl1)
+            info_col.add_widget(lbl1)
             
             lbl2 = Label(text=f"Vendedor: {v.get('vendedor_nombre', '')}  |  {v.get('fecha', '')} {v.get('hora', '')}",
                         color=(0.4,0.4,0.4,1), font_size=11, halign='left', size_hint_y=None, height=20)
-            fila.add_widget(lbl2)
+            info_col.add_widget(lbl2)
             
             lbl3 = Label(text=f"Total: ${precio_total:,.0f}  |  Recibido: ${float(v.get('dinero_recibido', 0)):,.0f}  |  Cambio: ${cambio:,.0f}",
                         color=(0.1,0.6,0.1,1), bold=True, font_size=12, halign='left', size_hint_y=None, height=25)
-            fila.add_widget(lbl3)
+            info_col.add_widget(lbl3)
+            
+            fila.add_widget(info_col)
+            
+            btn_eliminar = Button(text="🗑", size_hint_x=0.2, background_normal='',
+                                  background_color=(0.8,0.2,0.1,1), color=(1,1,1,1), font_size=18)
+            btn_eliminar.bind(on_press=lambda instance, id_venta=id_venta: self.confirmar_eliminar_venta(id_venta))
+            fila.add_widget(btn_eliminar)
             
             container.add_widget(fila)
+    
+    def confirmar_eliminar_venta(self, id_venta):
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        content.add_widget(Label(text=f"¿Eliminar venta ID {id_venta} permanentemente?", 
+                                 font_size=14, color=(0,0,0,1)))
+        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, spacing=10)
+        btn_si = Button(text="SÍ, ELIMINAR", background_color=(0.8,0.2,0.1,1), color=(1,1,1,1))
+        btn_no = Button(text="CANCELAR", background_color=(0.4,0.4,0.4,1), color=(1,1,1,1))
+        btn_box.add_widget(btn_si)
+        btn_box.add_widget(btn_no)
+        content.add_widget(btn_box)
+        
+        popup = Popup(title='Confirmar eliminación', content=content, 
+                      size_hint=(0.8, 0.4), auto_dismiss=False,
+                      title_color=(0.8,0.2,0.1,1), title_size=16)
+        
+        def confirmar(instance):
+            if eliminar_venta_por_id(id_venta):
+                popup.dismiss()
+                self.aplicar_filtros()
+                content_ok = BoxLayout(orientation='vertical', padding=10)
+                content_ok.add_widget(Label(text=f"Venta ID {id_venta} eliminada", color=(0.1,0.6,0.1,1)))
+                popup_ok = Popup(title='Éxito', content=content_ok, size_hint=(0.6,0.3), auto_dismiss=True)
+                popup_ok.open()
+            else:
+                popup.dismiss()
+                content_err = BoxLayout(orientation='vertical', padding=10)
+                content_err.add_widget(Label(text="Error al eliminar venta", color=(0.8,0.2,0.1,1)))
+                popup_err = Popup(title='Error', content=content_err, size_hint=(0.6,0.3), auto_dismiss=True)
+                popup_err.open()
+        
+        btn_si.bind(on_press=confirmar)
+        btn_no.bind(on_press=popup.dismiss)
+        popup.open()
+
+    def exportar_pdf(self):
+        if not PDF_DISPONIBLE:
+            popup = Popup(title='Error', content=Label(text='ReportLab no está instalado en este dispositivo'),
+                         size_hint=(0.7, 0.3))
+            popup.open()
+            return
+        
+        app = App.get_running_app()
+        if not app.sucursal_actual:
+            return
+        
+        filtro_vendedor = self.ids.filtro_vendedor.text
+        filtro_periodo = self.ids.filtro_periodo.text
+        fecha_inicio, fecha_fin = self._calcular_fechas(filtro_periodo)
+        
+        ventas = obtener_ventas(sucursal=app.sucursal_actual)
+        
+        if filtro_vendedor != 'TODOS':
+            ventas = [v for v in ventas if v.get('vendedor_nombre', '') == filtro_vendedor]
+        
+        if fecha_inicio and fecha_fin:
+            ventas_filtradas = []
+            for v in ventas:
+                fecha_venta = v.get('fecha', '')
+                if fecha_inicio <= fecha_venta <= fecha_fin:
+                    ventas_filtradas.append(v)
+            ventas = ventas_filtradas
+        
+        if not ventas:
+            popup = Popup(title='Sin datos', content=Label(text='No hay ventas para exportar'),
+                         size_hint=(0.7, 0.3))
+            popup.open()
+            return
+        
+        if platform == 'android':
+            try:
+                request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
+                if primary_external_storage_path:
+                    ruta_guardado = os.path.join(primary_external_storage_path(), 'Download')
+                else:
+                    ruta_guardado = RUTA_BASE
+            except:
+                ruta_guardado = RUTA_BASE
+        else:
+            ruta_guardado = RUTA_BASE
+        
+        os.makedirs(ruta_guardado, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre_archivo = f"reporte_ventas_{timestamp}.pdf"
+        ruta_completa = os.path.join(ruta_guardado, nombre_archivo)
+        
+        try:
+            doc = SimpleDocTemplate(ruta_completa, pagesize=letter)
+            styles = getSampleStyleSheet()
+            elementos = []
+            
+            titulo = Paragraph("REPORTE DE VENTAS", styles['Title'])
+            elementos.append(titulo)
+            elementos.append(Spacer(1, 0.25*inch))
+            
+            info_texto = f"Sucursal: {app.sucursal_actual} | Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            info_style = ParagraphStyle('info', parent=styles['Normal'], fontSize=10)
+            elementos.append(Paragraph(info_texto, info_style))
+            elementos.append(Spacer(1, 0.25*inch))
+            
+            datos_tabla = [["Producto", "Cant.", "Precio Unit.", "Total"]]
+            total_general = 0
+            
+            for v in ventas:
+                try:
+                    producto = v.get('producto_nombre', 'Desconocido')
+                    cantidad = str(v.get('cantidad', 0))
+                    precio_unitario = f"${float(v.get('precio_unitario', 0)):,.0f}"
+                    total = float(v.get('precio_total', 0))
+                    total_general += total
+                    datos_tabla.append([producto, cantidad, precio_unitario, f"${total:,.0f}"])
+                except:
+                    pass
+            
+            datos_tabla.append(["TOTAL", "", "", f"${total_general:,.0f}"])
+            
+            tabla = Table(datos_tabla, colWidths=[2.5*inch, 0.8*inch, 0.8*inch, 0.8*inch])
+            tabla.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            elementos.append(tabla)
+            
+            total_style = ParagraphStyle('total', parent=styles['Normal'], fontSize=12, fontName='Helvetica-Bold')
+            elementos.append(Spacer(1, 0.25*inch))
+            elementos.append(Paragraph(f"Total General: ${total_general:,.0f}", total_style))
+            
+            doc.build(elementos)
+            
+            mensaje = f"PDF guardado en:\n{ruta_completa}"
+            content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+            content.add_widget(Label(text=mensaje, halign='center', text_size=(dp(250), None)))
+            btn_ok = Button(text="OK", size_hint_y=None, height=40)
+            popup_exito = Popup(title='✅ Reporte generado', content=content, size_hint=(0.8, 0.5))
+            btn_ok.bind(on_press=popup_exito.dismiss)
+            content.add_widget(btn_ok)
+            popup_exito.open()
+            
+            if platform == 'android':
+                try:
+                    from android import intent
+                    intent.action_view(ruta_completa)
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"Error generando PDF: {e}")
+            popup = Popup(title='Error', content=Label(text=f'Error al generar PDF:\n{str(e)}'),
+                         size_hint=(0.8, 0.4))
+            popup.open()
     
     def cerrar_historial(self):
         app = App.get_running_app()
         app.root.current = 'catalog'
-
-
-class PinScreen(Screen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.pin_ingresado = ""
-        self.modo_config = False
-        self.pin_temporal = ""
-        self.intentos = 0
-        self.bloqueado_hasta = 0
-        self.countdown_event = None
-
-    def on_enter(self):
-        self.resetear_estado()
-        app = App.get_running_app()
-        if app.pin_hash is None:
-            self.modo_config = True
-            self.ids.title_label.text = "Configure su PIN"
-        else:
-            self.modo_config = False
-            self.ids.title_label.text = "Ingrese su PIN"
-        self.actualizar_circulos()
-
-    def resetear_estado(self):
-        self.pin_ingresado = ""
-        self.pin_temporal = ""
-        self.intentos = 0
-        self.bloqueado_hasta = 0
-        if self.countdown_event:
-            self.countdown_event.cancel()
-        self.ids.error_label.text = ""
-        self.ids.countdown_label.text = ""
-        self.actualizar_circulos()
-
-    def actualizar_circulos(self):
-        circles_box = self.ids.circles_box
-        circles_box.clear_widgets()
-        for i in range(4):
-            if i < len(self.pin_ingresado):
-                circles_box.add_widget(Label(text="●", font_size=32, color=(0.1, 0.35, 0.65, 1)))
-            else:
-                circles_box.add_widget(Label(text="○", font_size=32, color=(0.6, 0.6, 0.6, 1)))
-
-    def agregar_digito(self, digito):
-        if self.bloqueado_hasta > time.time():
-            return
-        if len(self.pin_ingresado) < 4:
-            self.pin_ingresado += digito
-            self.actualizar_circulos()
-            if len(self.pin_ingresado) == 4:
-                self.validar_pin()
-
-    def borrar_digito(self):
-        if self.bloqueado_hasta > time.time():
-            return
-        self.pin_ingresado = self.pin_ingresado[:-1]
-        self.actualizar_circulos()
-
-    def validar_pin(self):
-        app = App.get_running_app()
-        if self.modo_config:
-            if not self.pin_temporal:
-                self.pin_temporal = self.pin_ingresado
-                self.pin_ingresado = ""
-                self.actualizar_circulos()
-                self.ids.title_label.text = "Confirme su PIN"
-                self.ids.error_label.text = ""
-            else:
-                if self.pin_ingresado == self.pin_temporal:
-                    pin_hash = hashlib.sha256(self.pin_ingresado.encode()).hexdigest()
-                    app.guardar_pin_hash(pin_hash)
-                    app.pin_hash = pin_hash
-                    self.ir_siguiente()
-                else:
-                    self.ids.error_label.text = "Los PIN no coinciden. Intente de nuevo."
-                    self.pin_temporal = ""
-                    self.pin_ingresado = ""
-                    self.actualizar_circulos()
-                    self.ids.title_label.text = "Configure su PIN"
-        else:
-            pin_hash_ingresado = hashlib.sha256(self.pin_ingresado.encode()).hexdigest()
-            if pin_hash_ingresado == app.pin_hash:
-                self.ir_siguiente()
-            else:
-                self.intentos += 1
-                restantes = 3 - self.intentos
-                if restantes <= 0:
-                    self.bloquear()
-                else:
-                    self.ids.error_label.text = f"PIN incorrecto. Intentos restantes: {restantes}"
-                    self.pin_ingresado = ""
-                    self.actualizar_circulos()
-
-    def bloquear(self):
-        self.bloqueado_hasta = time.time() + 30
-        self.ids.error_label.text = "Demasiados intentos. Espere 30 segundos."
-        self.ids.countdown_label.text = "30"
-        self.countdown_event = Clock.schedule_interval(self.actualizar_countdown, 1)
-
-    def actualizar_countdown(self, dt):
-        remaining = int(self.bloqueado_hasta - time.time())
-        if remaining <= 0:
-            self.countdown_event.cancel()
-            self.countdown_event = None
-            self.ids.countdown_label.text = ""
-            self.ids.error_label.text = ""
-            self.intentos = 0
-            self.pin_ingresado = ""
-            self.actualizar_circulos()
-        else:
-            self.ids.countdown_label.text = str(remaining)
-
-    def ir_siguiente(self):
-        app = App.get_running_app()
-        if app.sucursal_actual and app.sucursal_actual in SUCURSALES:
-            app.root.current = 'splash'
-        else:
-            app.root.current = 'sucursal_selection'
 
 
 class SucursalSelectionScreen(Screen):
@@ -1398,14 +1389,23 @@ class CatalogScreen(Screen):
             filas = self.cursor.fetchall()
             data = []
             for r in filas:
+                precio_caja = self.safe_float(r[4])
+                precio_blister = self.safe_float(r[5])
+                precio_unidad = self.safe_float(r[6])
+                # Lógica: si alguno > 30 → SI HAY; si todos <= 30 → NO HAY
+                if precio_caja > 30 or precio_blister > 30 or precio_unidad > 30:
+                    estado = "SI HAY"
+                else:
+                    estado = "NO HAY"
                 item = {
                     'id_prod': str(r[0] or ""),
                     'barras': str(r[1] or ""),
                     'laboratorio': str(r[2] or "S/L"),
                     'nombre': str(r[3] or "Sin nombre"),
-                    'precio_caja': self._fmt(self.safe_float(r[4])),
-                    'precio_blister': self._fmt(self.safe_float(r[5])),
-                    'precio_unidad': self._fmt(self.safe_float(r[6])),
+                    'precio_caja': self._fmt(precio_caja),
+                    'precio_blister': self._fmt(precio_blister),
+                    'precio_unidad': self._fmt(precio_unidad),
+                    'estado': estado,
                     'catalog_screen': self
                 }
                 data.append(item)
@@ -1413,8 +1413,42 @@ class CatalogScreen(Screen):
         except Exception as e:
             logger.error(f"Error en búsqueda: {e}")
 
+    def eliminar_producto(self, id_prod):
+        if not id_prod:
+            return
+        
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        content.add_widget(Label(text=f"¿Eliminar producto ID: {id_prod}?", 
+                                 font_size=14, color=(0,0,0,1)))
+        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, spacing=10)
+        btn_si = Button(text="SÍ, ELIMINAR", background_color=(0.8,0.2,0.1,1), color=(1,1,1,1))
+        btn_no = Button(text="CANCELAR", background_color=(0.4,0.4,0.4,1), color=(1,1,1,1))
+        btn_box.add_widget(btn_si)
+        btn_box.add_widget(btn_no)
+        content.add_widget(btn_box)
+        
+        popup = Popup(title='Confirmar eliminación', content=content, 
+                      size_hint=(0.8, 0.4), auto_dismiss=False,
+                      title_color=(0.8,0.2,0.1,1), title_size=16)
+        
+        def confirmar_eliminar(instance):
+            try:
+                self.cursor.execute("DELETE FROM productos WHERE id = ?", (id_prod,))
+                self.conn.commit()
+                popup.dismiss()
+                self.mostrar_mensaje_temporal(f"🗑 Producto {id_prod} eliminado")
+                self.buscar_productos(self.ids.search_input.text)
+            except Exception as e:
+                popup.dismiss()
+                logger.error(f"Error eliminando producto: {e}")
+                self.mostrar_mensaje_temporal("Error al eliminar")
+        
+        btn_si.bind(on_press=confirmar_eliminar)
+        btn_no.bind(on_press=popup.dismiss)
+        popup.open()
+
     # ============================================================
-    # FUNCIONES DE VENDEDOR
+    # FUNCIONES DE VENDEDOR Y CARRITO (completas, igual que antes)
     # ============================================================
     def actualizar_boton_vender(self):
         btn = self.ids.vender_btn
@@ -1464,9 +1498,6 @@ class CatalogScreen(Screen):
         if hasattr(self, '_popup_vendedor'):
             self._popup_vendedor.dismiss()
 
-    # ============================================================
-    # FUNCIONES DEL CARRITO
-    # ============================================================
     def agregar_al_carrito(self, producto):
         for item in self.carrito:
             if item['producto']['id_prod'] == producto['id_prod']:
@@ -1736,10 +1767,6 @@ class CatalogScreen(Screen):
         popup_pago.open()
         Clock.schedule_once(lambda dt: calcular_cambio(), 0.1)
 
-    # ============================================================
-    # FIN FUNCIONES DE CARRITO
-    # ============================================================
-
     def ir_historial_ventas(self):
         app = App.get_running_app()
         historial = app.root.get_screen('historial_ventas')
@@ -1871,8 +1898,8 @@ class MiBaseDrogApp(App):
         if os.path.exists(ICONO_PATH.replace('/', os.sep)):
             self.icon = ICONO_PATH
         sm = ScreenManager(transition=FadeTransition(duration=0.2))
+        # Agregar todas las pantallas
         sm.add_widget(ActivationScreen(name='activation'))
-        sm.add_widget(PinScreen(name='pin'))
         sm.add_widget(SucursalSelectionScreen(name='sucursal_selection'))
         sm.add_widget(PreSplashScreen(name='splash'))
         sm.add_widget(CatalogScreen(name='catalog'))
@@ -1884,10 +1911,12 @@ class MiBaseDrogApp(App):
             self.device_id = generar_device_id()
             self.guardar_configuracion_completa()
         
-        if not self.activated:
-            sm.current = 'activation'
+        # Redirigir según licencia
+        if self.activated or cargar_licencia():
+            sm.current = 'sucursal_selection'
         else:
-            sm.current = 'pin'
+            sm.current = 'activation'
+        
         return sm
 
     def cargar_configuracion_completa(self):
@@ -1927,10 +1956,6 @@ class MiBaseDrogApp(App):
                 json.dump(config, f)
         except Exception as e:
             logger.error(f"Error guardando configuración: {e}")
-
-    def guardar_pin_hash(self, pin_hash):
-        self.pin_hash = pin_hash
-        self.guardar_configuracion_completa()
 
     def guardar_ultima_sync(self, sucursal):
         self.ultimas_sync[sucursal] = datetime.now().strftime("%d/%m/%Y %H:%M")
