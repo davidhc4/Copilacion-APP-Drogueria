@@ -34,6 +34,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer "cython<3.0"
 
+      - name: Cache de Buildozer (para compilar más rápido)
+        uses: actions/cache@v3
+        with:
+          path: ~/.buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
       - name: Limpiar descargas anteriores de Buildozer
         run: |
           rm -rf ~/.buildozer/android/platform/android-sdk
