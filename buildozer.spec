@@ -20,7 +20,7 @@ version = 3.5.5
 
 # (list) Application requirements
 # SIN CYTHON para evitar problemas con Python 3.14
-requirements = python3,kivy==2.3.1,requests,certifi,reportlab,fpdf2
+requirements = python3,kivy==2.3.1,requests,certifi,fpdf2
 
 # (str) Python version to use (android only)
 android.python_version = 3.13
