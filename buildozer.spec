@@ -1,5 +1,4 @@
 [app]
-
 # (str) Title of your application
 title = Precios Droguerias
 
@@ -16,17 +15,13 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,json,csv,db
 
 # (str) Application versioning (method 1)
-version = 3.5.5
+version = 3.9.9
 
 # (list) Application requirements
-# SIN CYTHON para evitar problemas con Python 3.14
 requirements = python3,kivy==2.3.1,requests,certifi,fpdf2
 
 # (str) Python version to use (android only)
 android.python_version = 3.13
-
-# (str) Presplash of the application
-#presplash.filename = %(source.dir)s/logo_farmacenter.png
 
 # (str) Icon of the application
 icon.filename = %(source.dir)s/icono.png
@@ -42,7 +37,7 @@ fullscreen = 0
 #
 
 # (list) Permissions
-android.permissions = INTERNET, ACCESS_NETWORK_STATE, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
 # (int) Target Android API, should be as high as possible.
 android.api = 33
@@ -58,13 +53,6 @@ android.archs = arm64-v8a
 
 # (bool) enables Android auto backup feature (Android API >=23)
 android.allow_backup = True
-
-#
-# Python for android (p4a) specific
-#
-
-# (str) The format used to package the app for debug mode (apk or aar).
-# p4a.bootstrap = sdl2
 
 [buildozer]
 
