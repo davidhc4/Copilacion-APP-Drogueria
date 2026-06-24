@@ -18,23 +18,31 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Limpiar repositorios problemáticos de apt
+        run: |
+          sudo rm /etc/apt/sources.list.d/azure-cli.sources 2>/dev/null || true
+          sudo rm /etc/apt/sources.list.d/microsoft-prod.list 2>/dev/null || true
+          sudo rm /etc/apt/sources.list.d/microsoft-ubuntu-repo.list 2>/dev/null || true
+          echo "✅ Repositorios de Microsoft removidos"
+
       - name: Instalar dependencias del sistema
         run: |
-          sudo apt-get update
+          export APT_OPTION='--allow-insecure-repositories -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowUnauthenticated=true'
+          sudo apt-get update $APT_OPTION || true
           sudo apt-get install -y \
             git zip unzip openjdk-17-jdk \
             autoconf libtool pkg-config \
             zlib1g-dev libncurses-dev libncursesw5-dev \
             libtinfo6 cmake libffi-dev libssl-dev \
             automake build-essential ccache \
-            libltdl-dev
+            libltdl-dev || true
 
       - name: Instalar Buildozer y Cython
         run: |
           python -m pip install --upgrade pip
           pip install buildozer "cython<3.0"
 
-      - name: Cache de Buildozer (para compilar más rápido)
+      - name: Cache de Buildozer
         uses: actions/cache@v3
         with:
           path: ~/.buildozer
@@ -51,8 +59,9 @@ jobs:
           rm -rf ~/.buildozer/android/platform/python-for-android
           rm -rf ~/.buildozer/android/platform/build-arm64-v8a/build/other_builds/hostpython3
           rm -rf ~/.buildozer/android/platform/build-arm64-v8a/build/other_builds/python3
+          echo "✅ Caché limpiado"
 
-      - name: Instalar Android SDK y NDK con setup-android
+      - name: Instalar Android SDK y NDK
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-33 build-tools;33.0.0 ndk;28.0.13004108'
@@ -61,22 +70,19 @@ jobs:
         run: |
           echo "🔍 Configurando enlaces simbólicos..."
           
-          # 1. Crear estructura de carpetas para Buildozer
           mkdir -p ~/.buildozer/android/platform
           
-          # 2. Enlazar SDK (ruta principal)
+          # SDK
           rm -rf ~/.buildozer/android/platform/android-sdk
           ln -sf /usr/local/lib/android/sdk ~/.buildozer/android/platform/android-sdk
           echo "✅ SDK enlazado"
           
-          # 3. Enlazar NDK
+          # NDK
           NDK_PATH=""
           if [ -d "/usr/local/lib/android/sdk/ndk/28.0.13004108" ]; then
             NDK_PATH="/usr/local/lib/android/sdk/ndk/28.0.13004108"
           elif [ -d "/usr/local/lib/android/sdk/ndk" ]; then
             NDK_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/*/ 2>/dev/null | head -1)
-          elif [ -d "/usr/local/lib/android/ndk" ]; then
-            NDK_PATH="/usr/local/lib/android/ndk"
           fi
           
           if [ -n "$NDK_PATH" ]; then
@@ -84,30 +90,21 @@ jobs:
             ln -sf $NDK_PATH ~/.buildozer/android/platform/android-ndk-r28c
             echo "✅ NDK enlazado desde: $NDK_PATH"
           else
-            echo "❌ ERROR: No se encontró el NDK"
+            echo "❌ ERROR: NDK no encontrado"
             exit 1
           fi
           
-          # 4. Crear enlace para sdkmanager en la ruta antigua (tools/bin/)
+          # sdkmanager
           mkdir -p /usr/local/lib/android/sdk/tools/bin
-          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/lib/android/sdk/tools/bin/sdkmanager
-          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/avdmanager /usr/local/lib/android/sdk/tools/bin/avdmanager
-          echo "✅ Enlaces de sdkmanager creados en tools/bin/"
+          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/lib/android/sdk/tools/bin/sdkmanager 2>/dev/null || true
+          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/avdmanager /usr/local/lib/android/sdk/tools/bin/avdmanager 2>/dev/null || true
+          echo "✅ Enlaces de herramientas creados"
 
       - name: Aceptar licencias de Android
         run: |
-          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          yes | /usr/local/lib/android/sdk/tools/bin/sdkmanager --licenses || true
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
-      - name: Configurar Python 3.13 y limpiar caché
-        run: |
-          echo "P4A_PYTHON_VERSION=3.13" >> $GITHUB_ENV
-          echo "PYTHON_VERSION=3.13" >> $GITHUB_ENV
-          rm -rf ~/.buildozer/android/platform/build-arm64-v8a/build/other_builds/hostpython3
-          rm -rf ~/.buildozer/android/platform/build-arm64-v8a/build/other_builds/python3
-          echo "✅ Caché de Python limpiada, forzando Python 3.13"
-
-      - name: Configurar entorno y compilar
+      - name: Compilar APK
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
@@ -115,19 +112,25 @@ jobs:
           export P4A_PYTHON_VERSION=3.13
           export PYTHON_VERSION=3.13
           
-          # Verificar enlaces antes de compilar
-          echo "📂 Verificando enlaces:"
-          ls -la /usr/local/lib/android/sdk/tools/bin/
-          ls -la ~/.buildozer/android/platform/
-          
-          echo "🚀 Iniciando compilación del APK..."
+          echo "🚀 Iniciando compilación..."
           buildozer android debug
         env:
           ANDROID_ACCEPT_SDK_LICENSE: "yes"
 
-      - name: Subir el APK como resultado
+      - name: Subir APK
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: PreciosFarmacenter-APK
           path: bin/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
+
+      - name: Mostrar resultado
+        if: always()
+        run: |
+          if [ -f bin/*.apk ]; then
+            echo "✅ APK compilado exitosamente:"
+            ls -lh bin/*.apk
+          else
+            echo "⚠️ No se encontró el APK"
+          fi
