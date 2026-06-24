@@ -13,7 +13,7 @@ package.domain = com.farmacenter
 source.dir = .
 
 # (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,kv,atlas,db,csv
+source.include_exts = py,png,jpg,kv,atlas,ttf,json,csv,db
 
 # (str) Application versioning (method 1)
 version = 3.5.5
