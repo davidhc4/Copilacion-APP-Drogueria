@@ -28,7 +28,7 @@ import hashlib
 # Secreto por cliente. CAMBIAR ESTE VALOR EN CADA BUILD QUE SE ENTREGUE.
 # Idealmente generado al azar y guardado en TU registro privado de ventas.
 # ----------------------------------------------------------------------
-CLIENTE_SECRETO = "FC_2026_MAIZAMARILLO_befda9"
+CLIENTE_SECRETO = "FC_2026_CLIENTEFREDD_d3178e"
 
 # Sufijo de versión del esquema de licencia. No es secreto.
 _LIC_VERSION = "v2"
