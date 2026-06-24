@@ -319,6 +319,16 @@ SUCURSALES = {
 }
 
 # ============================================================
+# CONTRASEÑAS POR SUCURSAL
+# ============================================================
+CONTRASENAS_SUCURSALES = {
+    "Maíz Amarillo": "1234",
+    "Villaceleste": "5678",
+    "Terranova": "9012",
+    "Covipro": "3456",
+}
+
+# ============================================================
 # RUTAS
 # ============================================================
 if platform == 'android':
@@ -438,7 +448,7 @@ class ProductoRow(BoxLayout):
             self.catalog_screen.eliminar_producto(self.id_prod)
 
 # ============================================================
-# KV STRING - CORREGIDO (sin sobreposiciones)
+# KV STRING - CON CONTRASEÑAS EN SUCURSALES
 # ============================================================
 KV_STRING = f'''
 <ProductoRow>:
@@ -803,7 +813,7 @@ KV_STRING = f'''
                 color: (1, 1, 1, 1)
                 bold: True
                 font_size: sp(10)
-                on_press: app.cambiar_sucursal()
+                on_press: app.ir_a_seleccion_sucursal()
 
 <HistorialVentasScreen>:
     name: 'historial_ventas'
@@ -940,7 +950,7 @@ KV_STRING = f'''
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
-                on_press: app.seleccionar_sucursal('Maíz Amarillo')
+                on_press: root.seleccionar_con_contraseña('Maíz Amarillo')
             Button:
                 text: "Terranova"
                 font_size: sp(14)
@@ -950,7 +960,7 @@ KV_STRING = f'''
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
-                on_press: app.seleccionar_sucursal('Terranova')
+                on_press: root.seleccionar_con_contraseña('Terranova')
             Button:
                 text: "Villaceleste"
                 font_size: sp(14)
@@ -960,7 +970,7 @@ KV_STRING = f'''
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
-                on_press: app.seleccionar_sucursal('Villaceleste')
+                on_press: root.seleccionar_con_contraseña('Villaceleste')
             Button:
                 text: "Covipro"
                 font_size: sp(14)
@@ -970,7 +980,7 @@ KV_STRING = f'''
                 background_normal: ''
                 background_color: (0.1, 0.35, 0.65, 1)
                 color: (1, 1, 1, 1)
-                on_press: app.seleccionar_sucursal('Covipro')
+                on_press: root.seleccionar_con_contraseña('Covipro')
 
 <PreSplashScreen>:
     name: 'splash'
@@ -1012,7 +1022,7 @@ Builder.load_string(KV_STRING)
 
 
 # ============================================================
-# CLASES DE PANTALLAS (sin cambios)
+# CLASES DE PANTALLAS
 # ============================================================
 class ActivationScreen(Screen):
     def on_enter(self):
@@ -1303,7 +1313,98 @@ class HistorialVentasScreen(Screen):
 
 
 class SucursalSelectionScreen(Screen):
-    pass
+    def seleccionar_con_contraseña(self, sucursal):
+        """Muestra un popup para ingresar la contraseña antes de cambiar de sucursal"""
+        app = App.get_running_app()
+        
+        # Si es la primera vez (no hay sucursal seleccionada) no pedir contraseña
+        if app.sucursal_actual is None:
+            app.seleccionar_sucursal(sucursal)
+            return
+        
+        # Si ya está en esa sucursal, no hacer nada
+        if app.sucursal_actual == sucursal:
+            app.seleccionar_sucursal(sucursal)  # Simplemente recarga
+            return
+        
+        # Crear popup para pedir contraseña
+        content = BoxLayout(orientation='vertical', padding=dp(16), spacing=dp(12))
+        
+        # Mensaje
+        content.add_widget(Label(
+            text=f"Ingrese la contraseña para\n{sucursal}",
+            font_size=sp(16),
+            bold=True,
+            color=(0.1, 0.35, 0.65, 1),
+            halign='center',
+            size_hint_y=None,
+            height=dp(50)
+        ))
+        
+        # Campo de contraseña
+        txt_password = TextInput(
+            hint_text="Contraseña",
+            password=True,
+            password_mask='●',
+            multiline=False,
+            font_size=sp(16),
+            size_hint_y=None,
+            height=dp(44),
+            padding=[dp(12), dp(12)]
+        )
+        content.add_widget(txt_password)
+        
+        # Mensaje de error
+        lbl_error = Label(
+            text="",
+            color=(0.8, 0.2, 0.1, 1),
+            font_size=sp(12),
+            size_hint_y=None,
+            height=dp(25)
+        )
+        content.add_widget(lbl_error)
+        
+        # Botones
+        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(42), spacing=dp(10))
+        btn_aceptar = Button(text="ACEPTAR", background_color=(0.1, 0.6, 0.1, 1), color=(1,1,1,1), bold=True, font_size=sp(14))
+        btn_cancelar = Button(text="CANCELAR", background_color=(0.6, 0.2, 0.1, 1), color=(1,1,1,1), bold=True, font_size=sp(14))
+        btn_box.add_widget(btn_aceptar)
+        btn_box.add_widget(btn_cancelar)
+        content.add_widget(btn_box)
+        
+        popup = Popup(
+            title='🔒 Cambiar Sucursal',
+            content=content,
+            size_hint=(0.8, 0.5),
+            auto_dismiss=False,
+            title_size=sp(16),
+            title_color=(0.1, 0.35, 0.65, 1)
+        )
+        
+        def verificar(instance):
+            password_ingresada = txt_password.text.strip()
+            contrasena_correcta = CONTRASENAS_SUCURSALES.get(sucursal, "")
+            
+            if password_ingresada == contrasena_correcta:
+                popup.dismiss()
+                app.seleccionar_sucursal(sucursal)
+            else:
+                lbl_error.text = "❌ Contraseña incorrecta"
+                txt_password.text = ""
+                txt_password.focus = True
+        
+        def cancelar(instance):
+            popup.dismiss()
+        
+        def enfocar_input(dt):
+            txt_password.focus = True
+            
+        btn_aceptar.bind(on_press=verificar)
+        btn_cancelar.bind(on_press=cancelar)
+        txt_password.bind(on_text_validate=verificar)  # Enter key
+        
+        popup.open()
+        Clock.schedule_once(enfocar_input, 0.1)
 
 
 class PreSplashScreen(Screen):
@@ -2055,6 +2156,11 @@ class MiBaseDrogApp(App):
 
     def goto_sucursal_selection(self):
         self.clear_sucursal()
+        self.root.current = 'sucursal_selection'
+
+    def ir_a_seleccion_sucursal(self):
+        """Método para ir a la selección de sucursal desde CatalogScreen"""
+        # NO borramos la sucursal para que al seleccionar una nueva pida contraseña
         self.root.current = 'sucursal_selection'
 
     def seleccionar_sucursal(self, nombre_sucursal):
