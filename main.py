@@ -95,7 +95,7 @@ if platform == 'android':
 
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("DrogueriasApp")
+logger = logging.getLogger("FarmacenterApp")
 
 # --- DESOFUSCACIÓN DE CADENAS ---
 _CLAVE_OFUS = "fc26"
@@ -337,24 +337,44 @@ CONTRASENAS_SUCURSALES = {
 # RUTAS
 # ============================================================
 if platform == 'android':
-    from android.storage import app_storage_path
     from jnius import autoclass
-    # Usar la carpeta de archivos de la app (escribible)
-    context = autoclass('android.app.PythonActivity').mActivity
-    files_dir = context.getFilesDir().toString()
-    RUTA_BASE = files_dir.replace('file://', '')
-    
+    RUTA_BASE = None
+    # Intentar obtener la carpeta de archivos escribible de la app
+    try:
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        actividad = PythonActivity.mActivity
+        if actividad is not None:
+            files_dir = actividad.getFilesDir().toString()
+            RUTA_BASE = files_dir.replace('file://', '')
+    except Exception as e:
+        logger.error(f"No se pudo obtener getFilesDir: {e}")
+    # Respaldo: usar app_storage_path si lo anterior falló
+    if not RUTA_BASE:
+        try:
+            from android.storage import app_storage_path
+            RUTA_BASE = app_storage_path()
+        except Exception as e:
+            logger.error(f"Respaldo app_storage_path falló: {e}")
+    # Último respaldo: carpeta actual
+    if not RUTA_BASE:
+        RUTA_BASE = os.path.dirname(os.path.abspath(__file__))
+
+    # device id de Android (también protegido)
     android_id = None
     try:
-        context = autoclass('android.content.Context')
         secure = autoclass('android.provider.Settings$Secure')
-        python_activity = autoclass('org.kivy.android.PythonActivity')
-        resolver = python_activity.mActivity.getContentResolver()
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        resolver = PythonActivity.mActivity.getContentResolver()
         android_id = secure.getString(resolver, secure.ANDROID_ID)
-    except:
+    except Exception as e:
+        logger.error(f"No se pudo leer ANDROID_ID: {e}")
         android_id = "unknown_android"
-    modelo = autoclass('android.os.Build').MODEL
-    fabricante = autoclass('android.os.Build').MANUFACTURER
+    try:
+        modelo = autoclass('android.os.Build').MODEL
+        fabricante = autoclass('android.os.Build').MANUFACTURER
+    except Exception:
+        modelo = "Android"
+        fabricante = "Generic"
 else:
     RUTA_BASE = os.path.dirname(os.path.abspath(__file__))
     android_id = None
