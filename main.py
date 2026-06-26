@@ -327,10 +327,10 @@ SUCURSALES = {
 # CONTRASEÑAS POR SUCURSAL
 # ============================================================
 CONTRASENAS_SUCURSALES = {
-    "Maíz Amarillo": "1234",
-    "Villaceleste": "5678",
-    "Terranova": "9012",
-    "Covipro": "3456",
+    "Maíz Amarillo": "25531",
+    "Villaceleste": "29383",
+    "Terranova": "32420",
+    "Covipro": "25532",
 }
 
 # ============================================================
