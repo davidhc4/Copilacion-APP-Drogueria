@@ -17,7 +17,7 @@ LICENCIA:
     no autorizado sin el consentimiento expreso de los titulares.
 
 INFORMACIÓN TÉCNICA:
-    Versión: 2.8.0  |  Lanzamiento: 2026  |  Plataforma: Android
+    Versión: 2.8.0  |  Lanzamiento: 26/06/2026  |  Plataforma: Android
 
 SOPORTE:
     Contacte a los desarrolladores para soporte técnico o solicitud de licencias.
@@ -2274,8 +2274,19 @@ class MiBaseDrogApp(App):
             self.device_id = generar_device_id()
             self.guardar_configuracion_completa()
         
+        # ============================================================
+        # CAMBIO: Si estamos en PC (desarrollo), asignar sucursal por defecto si no hay
+        # ============================================================
+        if platform != 'android' and self.sucursal_actual is None:
+            self.sucursal_actual = "Maíz Amarillo"
+            self.actualizar_rutas_sucursal()
+            self.guardar_configuracion_completa()
+        
         if self.activated or cargar_licencia():
-            sm.current = 'sucursal_selection'
+            if self.sucursal_actual is not None:
+                sm.current = 'splash'
+            else:
+                sm.current = 'sucursal_selection'
         else:
             sm.current = 'activation'
         
