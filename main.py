@@ -1658,6 +1658,12 @@ class CatalogScreen(Screen):
         self.actualizar_header_sucursal()
         inicializar_vendedores()
         self.actualizar_boton_vender()
+        # ============================================================
+        # NUEVO: Mostrar sucursal cargada
+        # ============================================================
+        app = App.get_running_app()
+        if app.sucursal_actual:
+            self.mostrar_mensaje_temporal(f"✅ Sucursal: {app.sucursal_actual}")
 
     def limpiar_vendedor(self):
         self.vendedor_actual = None
@@ -2269,25 +2275,28 @@ class MiBaseDrogApp(App):
         sm.add_widget(HistorialVentasScreen(name='historial_ventas'))
         
         self.cargar_configuracion_completa()
+        logger.info(f"Config cargada - sucursal: {self.sucursal_actual}")
         
         if self.device_id is None:
             self.device_id = generar_device_id()
             self.guardar_configuracion_completa()
         
-        # ============================================================
-        # CAMBIO: Si estamos en PC (desarrollo), asignar sucursal por defecto si no hay
-        # ============================================================
+        # En PC, asignar sucursal por defecto para desarrollo
         if platform != 'android' and self.sucursal_actual is None:
             self.sucursal_actual = "Maíz Amarillo"
             self.actualizar_rutas_sucursal()
             self.guardar_configuracion_completa()
+            logger.info("PC: asignada sucursal por defecto")
         
         if self.activated or cargar_licencia():
             if self.sucursal_actual is not None:
+                logger.info("Sucursal encontrada, yendo a splash")
                 sm.current = 'splash'
             else:
+                logger.info("No hay sucursal, yendo a selección")
                 sm.current = 'sucursal_selection'
         else:
+            logger.info("No activada, yendo a activación")
             sm.current = 'activation'
         
         return sm
@@ -2375,12 +2384,35 @@ class MiBaseDrogApp(App):
         self.root.current = 'sucursal_selection'
 
     def ir_a_seleccion_sucursal(self):
-        """Método para ir a la selección de sucursal desde CatalogScreen"""
-        # NO borramos la sucursal para que al seleccionar una nueva pida contraseña
         self.root.current = 'sucursal_selection'
 
     def seleccionar_sucursal(self, nombre_sucursal):
+        logger.info(f"Seleccionando sucursal: {nombre_sucursal}")
         self.set_sucursal(nombre_sucursal)
+        self.guardar_configuracion_completa()
+        self.cargar_configuracion_completa()
+        logger.info(f"Sucursal guardada: {self.sucursal_actual}")
+        
+        # ============================================================
+        # Popup de confirmación
+        # ============================================================
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        content.add_widget(Label(
+            text=f"Sucursal guardada:\n{nombre_sucursal}",
+            font_size=sp(16),
+            color=(0.1, 0.35, 0.65, 1),
+            halign='center'
+        ))
+        popup = Popup(
+            title='✅ Éxito',
+            content=content,
+            size_hint=(0.7, 0.3),
+            auto_dismiss=True
+        )
+        popup.open()
+        Clock.schedule_once(lambda dt: popup.dismiss(), 2)
+        # ============================================================
+        
         self.goto_splash_screen()
 
     def contar_productos(self):
