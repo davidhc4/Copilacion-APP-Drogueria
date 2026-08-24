@@ -20,7 +20,7 @@ INFORMACIÓN TÉCNICA:
     Versión: 2.8.0  |  Lanzamiento: 26/06/2026  |  Plataforma: Android
 
 SOPORTE:
-    Contacte a los desarrolladores para soporte técnico o solicitud de licencias.
+    Contacte a los desarrolladores para soporte o solicitud de licencias.
 ================================================================================
 """
 
