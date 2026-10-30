@@ -1,4 +1,4 @@
-name: Compilar APK Farmacenter
+name: Compilar APK Farmacenterh
 
 on:
   push:
@@ -109,8 +109,8 @@ jobs:
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
           export ANDROID_ACCEPT_SDK_LICENSE="yes"
-          export P4A_PYTHON_VERSION=3.13
-          export PYTHON_VERSION=3.13
+          export P4A_PYTHON_VERSION=3.11
+          export PYTHON_VERSION=3.11
           
           echo "🚀 Iniciando compilación..."
           buildozer android debug
