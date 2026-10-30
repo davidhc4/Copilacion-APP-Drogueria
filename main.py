@@ -90,7 +90,7 @@ if platform == 'android':
     from android.permissions import request_permissions, Permission
     try:
         from android.storage import primary_external_storage_path
-    except:
+    except ImportError:
         primary_external_storage_path = None
 
 # --- LOGGING ---
@@ -213,8 +213,8 @@ def agregar_venta(vendedor_id, vendedor_nombre, producto_id, producto_nombre,
                 if row:
                     try:
                         ultimo_id = int(row[0])
-                    except:
-                        pass
+                    except (ValueError, IndexError) as e:
+                        logger.warning(f"Fila de ventas con id inválido ignorada: {e}")
         ultimo_id += 1
     else:
         ultimo_id = 1
@@ -263,8 +263,8 @@ def calcular_total_ventas(ventas):
     for v in ventas:
         try:
             total += float(v.get('precio_total', 0))
-        except:
-            pass
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Venta con precio_total inválido ignorada: {e}")
     return total
 
 def eliminar_venta_por_id(id_venta):
@@ -325,13 +325,26 @@ SUCURSALES = {
 
 # ============================================================
 # CONTRASEÑAS POR SUCURSAL
+# Se guardan como hash SHA-256, no en texto plano. Esto evita que
+# la contraseña quede legible con un simple grep del código fuente
+# o del APK descompilado; no protege contra un ataque de fuerza
+# bruta offline sobre 5 dígitos, que sigue siendo trivial en un
+# cliente sin backend. Para eso haría falta validar contra un
+# servidor, que la app no tiene.
 # ============================================================
-CONTRASENAS_SUCURSALES = {
-    "Maíz Amarillo": "25531",
-    "Villaceleste": "29383",
-    "Terranova": "32420",
-    "Covipro": "25532",
+def _hash_clave(clave):
+    return hashlib.sha256(clave.encode()).hexdigest()
+
+CONTRASENAS_SUCURSALES_HASH = {
+    "Maíz Amarillo": _hash_clave("25531"),
+    "Villaceleste": _hash_clave("29383"),
+    "Terranova": _hash_clave("32420"),
+    "Covipro": _hash_clave("25532"),
 }
+
+def verificar_contrasena_sucursal(sucursal, clave_ingresada):
+    hash_esperado = CONTRASENAS_SUCURSALES_HASH.get(sucursal)
+    return hash_esperado is not None and _hash_clave(clave_ingresada) == hash_esperado
 
 # ============================================================
 # RUTAS
@@ -1425,7 +1438,8 @@ class HistorialVentasScreen(Screen):
                     ruta_guardado = os.path.join(primary_external_storage_path(), 'Download')
                 else:
                     ruta_guardado = RUTA_BASE
-            except:
+            except Exception as e:
+                logger.warning(f"Permiso de almacenamiento no disponible, usando ruta interna: {e}")
                 ruta_guardado = RUTA_BASE
         else:
             ruta_guardado = RUTA_BASE
@@ -1472,8 +1486,8 @@ class HistorialVentasScreen(Screen):
                     pdf.cell(col_widths[2], 7, precio_unitario, border=1, align='R')
                     pdf.cell(col_widths[3], 7, f"${total:,.0f}", border=1, align='R')
                     pdf.ln()
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Fila de venta omitida en PDF: {e}")
             
             pdf.set_font('Arial', 'B', 9)
             pdf.cell(col_widths[0] + col_widths[1] + col_widths[2], 8, 'TOTAL GENERAL', border=1, align='R')
@@ -1494,8 +1508,8 @@ class HistorialVentasScreen(Screen):
                 try:
                     from android import intent
                     intent.action_view(ruta_completa)
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"No se pudo abrir el PDF automáticamente: {e}")
                     
         except Exception as e:
             logger.error(f"Error generando PDF: {e}")
@@ -1575,9 +1589,8 @@ class SucursalSelectionScreen(Screen):
         
         def verificar(instance):
             password_ingresada = txt_password.text.strip()
-            contrasena_correcta = CONTRASENAS_SUCURSALES.get(sucursal, "")
-            
-            if password_ingresada == contrasena_correcta:
+
+            if verificar_contrasena_sucursal(sucursal, password_ingresada):
                 popup.dismiss()
                 app.seleccionar_sucursal(sucursal)
             else:
@@ -1706,7 +1719,7 @@ class CatalogScreen(Screen):
         try:
             limpio = str(valor).strip().replace(",", "")
             return float(limpio)
-        except:
+        except (ValueError, TypeError):
             return 0.0
 
     def _fmt(self, valor):
@@ -2079,7 +2092,7 @@ class CatalogScreen(Screen):
                     lbl_cambio.text = f"Faltan ${abs(cambio):,.0f}"
                     lbl_cambio.color = (0.8,0.2,0.1,1)
                 return cambio >= 0
-            except:
+            except (ValueError, TypeError):
                 return False
         
         txt_dinero.bind(text=calcular_cambio)
@@ -2202,7 +2215,8 @@ class CatalogScreen(Screen):
                             self.safe_float(row.get('ValorBlisterContado', 0)),
                             self.safe_float(row.get('ValorUnidadContado', 0)),
                         ))
-                    except:
+                    except Exception as e:
+                        logger.warning(f"Fila de CSV omitida en sincronización: {e}")
                         continue
                     filas_procesadas += 1
                     if filas_procesadas % 100 == 0:
@@ -2425,7 +2439,8 @@ class MiBaseDrogApp(App):
             count = cursor.fetchone()[0]
             conn.close()
             return count
-        except:
+        except sqlite3.Error as e:
+            logger.error(f"Error contando productos en {self.db_path}: {e}")
             return 0
 
     def descargar_y_sincronizar(self, callback=None):
@@ -2470,7 +2485,8 @@ class MiBaseDrogApp(App):
                             self._safe_float(row.get('ValorBlisterContado', 0)),
                             self._safe_float(row.get('ValorUnidadContado', 0)),
                         ))
-                    except:
+                    except Exception as e:
+                        logger.warning(f"Fila de CSV omitida en importación: {e}")
                         continue
             if datos:
                 cursor.execute("DELETE FROM productos")
@@ -2488,7 +2504,7 @@ class MiBaseDrogApp(App):
             return 0.0
         try:
             return float(str(valor).strip().replace(",", ""))
-        except:
+        except (ValueError, TypeError):
             return 0.0
 
     def cambiar_sucursal(self):
@@ -2500,8 +2516,8 @@ class MiBaseDrogApp(App):
                 cat = self.root.get_screen('catalog')
                 if hasattr(cat, 'conn') and cat.conn:
                     cat.conn.close()
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error cerrando conexión DB al salir: {e}")
 
 
 if __name__ == '__main__':
