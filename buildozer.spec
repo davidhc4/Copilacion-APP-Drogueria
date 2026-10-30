@@ -21,6 +21,9 @@ source.include_exts = py,png,jpg,kv,atlas,db,csv
 #  - config.json / respaldos : datos locales que cada dispositivo crea solo.
 source.exclude_patterns = panel_control.py,clientes_farmacenter.csv,config.json,licencia.json,respaldos/*,reportes/*
 
+# Fija p4a a release estable (Python 3.11.5); master usa Python 3.14 y rompe Kivy 2.3.1
+p4a.branch = v2024.01.21
+
 # (str) Application versioning (method 1)
 version = 2.7.1
 
