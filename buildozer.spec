@@ -13,7 +13,13 @@ package.domain = com.farmacenter
 source.dir = .
 
 # (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,kv,atlas,db,csv,ttf,json
+source.include_exts = py,png,jpg,kv,atlas,db,csv
+
+# (list) Archivos/carpetas que NUNCA deben entrar al APK del cliente.
+#  - panel_control.py  : herramienta interna (la ejecutas en TU PC, no se compila).
+#  - clientes_farmacenter.csv : contiene los secretos de TODOS tus clientes.
+#  - config.json / respaldos : datos locales que cada dispositivo crea solo.
+source.exclude_patterns = panel_control.py,clientes_farmacenter.csv,config.json,licencia.json,respaldos/*,reportes/*
 
 # (str) Application versioning (method 1)
 version = 2.7.1
@@ -21,7 +27,7 @@ version = 2.7.1
 # (list) Application requirements
 # IMPORTANTE: cython aquí permite compilar licencia.py a binario (.so)
 # y no dejarlo como .pyc fácilmente descompilable.
-requirements = python3,kivy==2.3.1,requests,certifi,fpdf2
+requirements = python3,kivy==2.3.1,requests,certifi,sqlite3,cython
 
 # (str) Presplash of the application
 #presplash.filename = %(source.dir)s/logo_farmacenter.png
