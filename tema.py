@@ -19,6 +19,7 @@ import os
 import sys
 
 from kivy.metrics import dp, sp
+from kivy.clock import Clock as _Clock
 from kivy.utils import platform, get_color_from_hex as H
 from kivy.animation import Animation
 from kivy.core.text import LabelBase
@@ -30,13 +31,14 @@ from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.spinner import Spinner, SpinnerOption
-from kivy.graphics import Color, RoundedRectangle, Line
+from kivy.uix.dropdown import DropDown
+from kivy.graphics import Color, RoundedRectangle, Line, PushMatrix, PopMatrix, Scale, Rotate
 
 # ============================================================
-# PALETA DE MARCA FARMACENTER
+# PALETA DE MARCA FARMACENTER (clara) Y SU VARIANTE OSCURA
 # Derivada del logo: azul corporativo + naranja de acento.
 # ============================================================
-COL = {
+COL_LIGHT = {
     # Azules de marca
     "primary":        H("#1B5BA6"),   # azul Farmacenter
     "primary_dark":   H("#0E3D73"),   # azul profundo (encabezados)
@@ -61,6 +63,35 @@ COL = {
     "white":          H("#FFFFFF"),
     "shadow":         (0, 0, 0, 0.16), # sombra base
 }
+
+COL_DARK = {
+    # Los azules de marca y el acento se mantienen (identidad visual).
+    "primary":        H("#2E7BD6"),
+    "primary_dark":   H("#0E3D73"),
+    "primary_light":  H("#1B2A3D"),   # fondos suaves -> azul oscuro, no blanco
+    "accent":         H("#F39200"),
+    "accent_dark":    H("#D87E00"),
+    "success":        H("#27C06B"),
+    "success_dark":   H("#1A9650"),
+    "danger":         H("#F0564A"),
+    "danger_dark":    H("#C23323"),
+    "warning":        H("#F5A623"),
+    # Neutros invertidos
+    "bg":             H("#14181F"),   # fondo general (casi negro)
+    "card":           H("#1E242D"),   # tarjetas
+    "surface":        H("#1E242D"),
+    "border":         H("#303944"),   # bordes sutiles
+    "text":           H("#EDEFF2"),   # texto principal
+    "text_soft":      H("#AEB6C2"),   # texto secundario
+    "text_mute":      H("#6B7480"),   # texto terciario / hints
+    "white":          H("#FFFFFF"),
+    "shadow":         (0, 0, 0, 0.4), # sombra base (más marcada en fondo oscuro)
+}
+
+# COL es el diccionario "vivo" que usa toda la app (KV y Python). Empieza con
+# la paleta clara; `alternar_tema()` en main.py lo actualiza en el mismo
+# objeto para que el cambio de tema se refleje al instante en toda la UI.
+COL = dict(COL_LIGHT)
 
 # ============================================================
 # FUENTE DE ICONOS VECTORIALES (Material Design Icons)
@@ -119,6 +150,14 @@ ICON = {
     "lock":        "\U000F033E",  # lock
     "chevron":     "\U000F0140",  # chevron-down
     "back":        "\U000F004D",  # arrow-left
+    "cog":         "\U000F0493",  # cog (ajustes)
+    "moon":        "\U000F0594",  # weather-night (luna)
+    "sun":         "\U000F05A6",  # white-balance-sunny (sol)
+    "star":        "\U000F04CE",  # star
+    "medical_bag": "\U000F06F2",  # medical-bag
+    "database":    "\U000F01BC",  # database
+    "save":        "\U000F0193",  # content-save (guardar)
+    "restore":     "\U000F0066",  # backup-restore (restaurar)
 }
 
 def ic(nombre):
@@ -137,6 +176,18 @@ def animar_press(widget):
     a.start(widget)
 
 
+def animar_press_down(widget):
+    """Encoge el widget y lo deja así mientras se mantenga presionado."""
+    Animation.cancel_all(widget, "scale_anim")
+    Animation(scale_anim=0.94, d=0.08, t="out_quad").start(widget)
+
+
+def animar_press_up(widget):
+    """Devuelve el widget a su tamaño normal al soltar (con rebote)."""
+    Animation.cancel_all(widget, "scale_anim")
+    Animation(scale_anim=1.0, d=0.14, t="out_back").start(widget)
+
+
 def fade_in(widget, d=0.25):
     widget.opacity = 0
     Animation(opacity=1, d=d, t="out_quad").start(widget)
@@ -153,6 +204,7 @@ class MButton(Button):
     bg_down = ListProperty(COL["primary_dark"])
     shadow_on = BooleanProperty(True)
     scale_anim = NumericProperty(1.0)
+    spin = NumericProperty(0)       # rotación (para animar el sol/luna)
     elev = NumericProperty(dp(4))   # desplazamiento de la sombra
 
     def __init__(self, **kwargs):
@@ -164,26 +216,37 @@ class MButton(Button):
         kwargs.setdefault("bold", True)
         super().__init__(**kwargs)
         self._draw = {}
+        # Se usa una transformación de escala (Scale) que envuelve TODO el
+        # contenido del botón (fondo, sombra, texto y labels hijos). Así, al
+        # presionar, el texto encoge junto con el fondo y nunca se sale del
+        # botón. PushMatrix va en canvas.before y PopMatrix en canvas.after.
         with self.canvas.before:
+            PushMatrix()
+            self._scale = Scale(1, 1, 1)
+            self._rot = Rotate(angle=0, axis=(0, 0, 1))
             self._c_shadow = Color(*COL["shadow"])
             self._r_shadow = RoundedRectangle(radius=[self.radius])
             self._c_bg = Color(*self.bg)
             self._r_bg = RoundedRectangle(radius=[self.radius])
+        with self.canvas.after:
+            PopMatrix()
         self.bind(pos=self._sync, size=self._sync, scale_anim=self._sync,
                   bg=self._sync, state=self._sync, radius=self._sync,
-                  disabled=self._sync, shadow_on=self._sync, elev=self._sync)
+                  disabled=self._sync, shadow_on=self._sync, elev=self._sync,
+                  spin=self._sync)
         self._sync()
 
     def _sync(self, *a):
-        s = self.scale_anim
-        w, h = self.width * s, self.height * s
-        x = self.x + (self.width - w) / 2.0
-        y = self.y + (self.height - h) / 2.0
+        # La escala y la rotación se aplican alrededor del centro del botón.
+        self._scale.origin = (self.center_x, self.center_y)
+        self._scale.x = self._scale.y = self.scale_anim
+        self._rot.origin = (self.center_x, self.center_y)
+        self._rot.angle = self.spin
         # Sombra
         sh_alpha = COL["shadow"][3] if (self.shadow_on and not self.disabled) else 0
         self._c_shadow.rgba = (0, 0, 0, sh_alpha)
-        self._r_shadow.pos = (x, y - self.elev)
-        self._r_shadow.size = (w, h)
+        self._r_shadow.pos = (self.x, self.y - self.elev)
+        self._r_shadow.size = (self.width, self.height)
         self._r_shadow.radius = [self.radius]
         # Fondo (oscurece al presionar, gris si disabled)
         if self.disabled:
@@ -193,13 +256,17 @@ class MButton(Button):
         else:
             base = self.bg
         self._c_bg.rgba = base
-        self._r_bg.pos = (x, y)
-        self._r_bg.size = (w, h)
+        self._r_bg.pos = (self.x, self.y)
+        self._r_bg.size = (self.width, self.height)
         self._r_bg.radius = [self.radius]
 
-    def on_press(self):
-        animar_press(self)
-        return super().on_press()
+    def on_state(self, instance, value):
+        # Mientras el botón se mantenga presionado, se queda encogido/oscuro;
+        # solo vuelve a su tamaño normal (con rebote) al soltarlo.
+        if value == "down":
+            animar_press_down(self)
+        else:
+            animar_press_up(self)
 
 
 class MIconButton(MButton):
@@ -247,6 +314,14 @@ class MTextIconButton(MButton):
         self._tx = _L(bold=True, color=self.color, size_hint=(None, None))
         self._row.add_widget(self._ic)
         self._row.add_widget(self._tx)
+        # Escala propia del row: encoge icono+texto para que SIEMPRE quepan
+        # dentro del botón aunque la etiqueta sea larga (p. ej. "RESPALDO DE
+        # BASE DE DATOS"). Se suma a la escala de presión del botón.
+        with self._row.canvas.before:
+            PushMatrix()
+            self._row_scale = Scale(1, 1, 1)
+        with self._row.canvas.after:
+            PopMatrix()
         self.add_widget(self._row)
         self.bind(pos=self._relayout, size=self._relayout,
                   icon=self._refresh, label=self._refresh,
@@ -272,11 +347,32 @@ class MTextIconButton(MButton):
         self._row.width = self._ic.width + self._row.spacing + self._tx.width
         self._row.height = max(self._ic.height, self._tx.height)
         self._relayout()
+        # Reajuste tras el layout (por si pos/size aún no eran definitivos).
+        _Clock.schedule_once(self._relayout, 0)
+
+    def _sync(self, *a):
+        # Se ejecuta en cada cambio de pos/size/estado del botón (heredado de
+        # MButton). Reposicionar el row aquí garantiza que quede centrado con
+        # la geometría FINAL del botón (el bind a pos/size podía correr con un
+        # ancho todavía provisional y dejaba el texto corrido a la izquierda).
+        super()._sync(*a)
+        if hasattr(self, "_row"):
+            self._relayout()
 
     def _relayout(self, *a):
-        s = self.scale_anim
-        self._row.center_x = self.center_x
-        self._row.center_y = self.center_y
+        # Se calcula el centro a mano (x + w/2) en vez de usar self.center_x,
+        # porque al dispararse por un cambio de 'size', la propiedad center_x
+        # aún no se ha recalculado y devolvía un valor viejo -> el texto
+        # quedaba corrido a la izquierda.
+        cx = self.x + self.width / 2.0
+        cy = self.y + self.height / 2.0
+        self._row.center_x = cx
+        self._row.center_y = cy
+        # Si el contenido es más ancho que el botón, se reduce para que quepa.
+        avail = max(1.0, self.width - dp(16))
+        fit = min(1.0, avail / self._row.width) if self._row.width else 1.0
+        self._row_scale.origin = (cx, cy)
+        self._row_scale.x = self._row_scale.y = fit
 
 
 # ============================================================
@@ -336,6 +432,13 @@ class MTextInput(TextInput):
         self._sync()
 
     def _sync(self, *a):
+        # Relee COL siempre (no solo en __init__) para que el campo cambie de
+        # color al instante si se alterna claro/oscuro, aunque este widget ya
+        # llevara rato construido.
+        self._c_bg.rgba = COL["card"]
+        self.foreground_color = COL["text"]
+        self.cursor_color = COL["primary"]
+        self.hint_text_color = COL["text_mute"]
         self._r_bg.pos = self.pos
         self._r_bg.size = self.size
         self._r_bg.radius = [self.radius]
@@ -350,11 +453,57 @@ class MTextInput(TextInput):
 class _MSpinnerOption(SpinnerOption):
     def __init__(self, **kwargs):
         kwargs.setdefault("background_normal", "")
-        kwargs.setdefault("background_color", COL["primary"])
+        kwargs.setdefault("background_down", "")
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
         kwargs.setdefault("color", COL["white"])
         kwargs.setdefault("font_size", sp(12))
-        kwargs.setdefault("height", dp(40))
+        kwargs.setdefault("height", dp(44))
+        self._font_base = kwargs.get("font_size", sp(12))
         super().__init__(**kwargs)
+        self.halign = "center"
+        self.valign = "middle"
+        with self.canvas.before:
+            self._c = Color(*COL["primary"])
+            self._r = RoundedRectangle(radius=[dp(10)])
+        self.bind(pos=self._sync, size=self._sync, state=self._sync, text=self._fit)
+        self._sync()
+
+    def _sync(self, *a):
+        self._c.rgba = COL["primary_dark"] if self.state == "down" else COL["primary"]
+        # Pequeño margen para que cada opción se vea como un chip redondeado.
+        self._r.pos = (self.x + dp(3), self.y + dp(2))
+        self._r.size = (self.width - dp(6), self.height - dp(4))
+        self._r.radius = [dp(10)]
+        self._fit()
+
+    def _fit(self, *a):
+        # Reduce el tamaño de letra para que los nombres largos entren
+        # completos dentro del chip en lugar de cortarse por los lados.
+        avail = max(1.0, self.width - dp(24))
+        self.font_size = self._font_base
+        self.text_size = (None, None)
+        self.texture_update()
+        tw = self.texture_size[0] if self.texture_size else 0
+        if tw > avail:
+            factor = max(0.6, avail / tw)
+            self.font_size = self._font_base * factor
+        self.text_size = (self.width - dp(12), self.height)
+
+
+class _MDropDown(DropDown):
+    """Contenedor del desplegable con fondo redondeado (sin esquinas duras)."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            self._c = Color(*COL["card"])
+            self._r = RoundedRectangle(radius=[dp(12)])
+        self.bind(pos=self._sync, size=self._sync)
+
+    def _sync(self, *a):
+        self._c.rgba = COL["card"]
+        self._r.pos = self.pos
+        self._r.size = self.size
+        self._r.radius = [dp(12)]
 
 
 class MSpinner(Spinner):
@@ -367,6 +516,7 @@ class MSpinner(Spinner):
         kwargs.setdefault("color", COL["white"])
         kwargs.setdefault("bold", True)
         kwargs.setdefault("option_cls", _MSpinnerOption)
+        kwargs.setdefault("dropdown_cls", _MDropDown)
         super().__init__(**kwargs)
         with self.canvas.before:
             self._c_bg = Color(*self.bg)
