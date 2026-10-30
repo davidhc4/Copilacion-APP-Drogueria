@@ -20,12 +20,13 @@ INFORMACIÓN TÉCNICA:
     Versión: 2.8.0  |  Lanzamiento: 26/06/2026  |  Plataforma: Android
 
 SOPORTE:
-    Contacte a los desarrolladores para soporte o solicitud de licencias.
+    Contacte a los desarrolladores para soporte técnico o solicitud de licencias.
 ================================================================================
 """
 
 import sqlite3
 import os
+import shutil
 import csv
 import requests
 import threading
@@ -44,6 +45,8 @@ from tema import (
     COL, ic, MButton, MIconButton, MTextIconButton, MCard, MTextInput, MSpinner,
     registrar_fuentes, ICON_FONT_NAME, fade_in,
 )
+from kivy.animation import Animation
+from kivy.uix.progressbar import ProgressBar
 from kivy.config import Config
 Config.set('graphics', 'maxfps', '60')
 from kivy.app import App
@@ -51,7 +54,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
 from kivy.lang import Builder
-from kivy.properties import StringProperty, NumericProperty, ObjectProperty
+from kivy.properties import StringProperty, NumericProperty, ObjectProperty, DictProperty, BooleanProperty
 from kivy.clock import Clock
 from kivy.utils import platform
 from kivy.uix.button import Button
@@ -90,7 +93,7 @@ if platform == 'android':
     from android.permissions import request_permissions, Permission
     try:
         from android.storage import primary_external_storage_path
-    except ImportError:
+    except:
         primary_external_storage_path = None
 
 # --- LOGGING ---
@@ -124,6 +127,12 @@ def get_csv_vendedores():
 
 def get_csv_ventas():
     return os.path.join(get_ruta_ventas(), 'ventas.csv')
+
+def get_ruta_respaldos():
+    ruta = os.path.join(RUTA_BASE, 'respaldos')
+    if not os.path.exists(ruta):
+        os.makedirs(ruta)
+    return ruta
 
 # ============================================================
 # VENDEDORES POR SUCURSAL
@@ -213,8 +222,8 @@ def agregar_venta(vendedor_id, vendedor_nombre, producto_id, producto_nombre,
                 if row:
                     try:
                         ultimo_id = int(row[0])
-                    except (ValueError, IndexError) as e:
-                        logger.warning(f"Fila de ventas con id inválido ignorada: {e}")
+                    except:
+                        pass
         ultimo_id += 1
     else:
         ultimo_id = 1
@@ -263,8 +272,8 @@ def calcular_total_ventas(ventas):
     for v in ventas:
         try:
             total += float(v.get('precio_total', 0))
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Venta con precio_total inválido ignorada: {e}")
+        except:
+            pass
     return total
 
 def eliminar_venta_por_id(id_venta):
@@ -325,26 +334,13 @@ SUCURSALES = {
 
 # ============================================================
 # CONTRASEÑAS POR SUCURSAL
-# Se guardan como hash SHA-256, no en texto plano. Esto evita que
-# la contraseña quede legible con un simple grep del código fuente
-# o del APK descompilado; no protege contra un ataque de fuerza
-# bruta offline sobre 5 dígitos, que sigue siendo trivial en un
-# cliente sin backend. Para eso haría falta validar contra un
-# servidor, que la app no tiene.
 # ============================================================
-def _hash_clave(clave):
-    return hashlib.sha256(clave.encode()).hexdigest()
-
-CONTRASENAS_SUCURSALES_HASH = {
-    "Maíz Amarillo": _hash_clave("25531"),
-    "Villaceleste": _hash_clave("29383"),
-    "Terranova": _hash_clave("32420"),
-    "Covipro": _hash_clave("25532"),
+CONTRASENAS_SUCURSALES = {
+    "Maíz Amarillo": "25531",
+    "Villaceleste": "29383",
+    "Terranova": "32420",
+    "Covipro": "25532",
 }
-
-def verificar_contrasena_sucursal(sucursal, clave_ingresada):
-    hash_esperado = CONTRASENAS_SUCURSALES_HASH.get(sucursal)
-    return hash_esperado is not None and _hash_clave(clave_ingresada) == hash_esperado
 
 # ============================================================
 # RUTAS
@@ -408,6 +404,34 @@ else:
     ICONO_PATH = os.path.join(BASE_DIR, 'icono.png').replace('\\', '/')
 
 CONFIG_FILE = os.path.join(RUTA_BASE, 'config.json')
+
+# ============================================================
+# ABRIR CORREO (Gmail) PARA CONTACTAR AL DESARROLLADOR
+# ============================================================
+def abrir_cliente_correo(destinatario, asunto="Soporte Precios Farmacenter"):
+    """Abre Gmail (o el cliente de correo disponible) con un mensaje nuevo
+    ya dirigido a `destinatario`."""
+    try:
+        if platform == 'android':
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            activity = autoclass('org.kivy.android.PythonActivity').mActivity
+            intent = Intent(Intent.ACTION_SENDTO)
+            intent.setData(Uri.parse(f"mailto:{destinatario}"))
+            intent.putExtra(Intent.EXTRA_SUBJECT, asunto)
+            try:
+                intent.setPackage("com.google.android.gm")
+                activity.startActivity(intent)
+            except Exception:
+                # Gmail no está instalado o rechazó el intent: deja que el
+                # usuario elija el cliente de correo disponible.
+                intent.setPackage(None)
+                activity.startActivity(intent)
+        else:
+            import webbrowser
+            webbrowser.open(f"mailto:{destinatario}?subject={asunto}")
+    except Exception as e:
+        logger.error(f"No se pudo abrir el cliente de correo: {e}")
 
 # ============================================================
 # LICENCIA: GUARDAR Y CARGAR
@@ -481,7 +505,7 @@ class ProductoRow(BoxLayout):
         else:
             if not self.catalog_screen or not self.catalog_screen.vendedor_actual:
                 popup = Popup(title='Atención', 
-                              content=Label(text='Debe seleccionar un vendedor primero'),
+                              content=Label(text='Debe seleccionar un vendedor primero', color=COL['text']),
                               size_hint=(0.7,0.3))
                 popup.open()
 
@@ -493,28 +517,34 @@ class ProductoRow(BoxLayout):
 # KV STRING - CON CONTRASEÑAS EN SUCURSALES
 # ============================================================
 KV_STRING = f'''
-#:import COL tema.COL
 #:import ic tema.ic
 
 # ============================================================
 #  ESTILO GLOBAL DE POPUPS (afecta a todos los Popup de la app)
 # ============================================================
 <Popup>:
-    title_color: COL['text']
+    title_color: app.theme['text']
     title_size: sp(15)
     title_align: 'center'
-    separator_color: COL['accent']
+    separator_color: app.theme['accent']
     separator_height: dp(2)
     background: ''
     background_color: (0, 0, 0, 0)
+    overlay_color: (0, 0, 0, 0)
     canvas.before:
-        # tarjeta redondeada del popup
+        # Atenuado propio del fondo (enfoca el popup) + tarjeta OPACA.
+        # Se dibuja en canvas.before, así el contenido (hijos) queda encima.
         Color:
-            rgba: COL['card']
+            rgba: (0, 0, 0, 0.5)
+        Rectangle:
+            size: self._window.size if self._window else (0, 0)
+            pos: (0, 0)
+        Color:
+            rgba: app.theme['card']
         RoundedRectangle:
             pos: self.pos
             size: self.size
-            radius: [dp(18)]
+            radius: [dp(22)]
 
 # ============================================================
 #  FILA DE PRODUCTO (Tarjeta premium)
@@ -535,7 +565,7 @@ KV_STRING = f'''
             radius: [dp(14)]
         # tarjeta
         Color:
-            rgba: COL['card']
+            rgba: app.theme['card']
         RoundedRectangle:
             size: self.width - dp(10), self.height - dp(10)
             pos: self.x + dp(5), self.y + dp(5)
@@ -548,7 +578,7 @@ KV_STRING = f'''
         spacing: dp(2)
         Label:
             text: root.nombre
-            color: COL['text']
+            color: app.theme['text']
             bold: True
             font_size: sp(13)
             text_size: self.width, None
@@ -560,7 +590,7 @@ KV_STRING = f'''
             height: dp(18)
         Label:
             text: "Lab " + root.laboratorio + "   ·   Cod " + root.id_prod
-            color: COL['text_mute']
+            color: app.theme['text_mute']
             font_size: sp(9.5)
             text_size: self.width, None
             halign: 'left'
@@ -578,7 +608,7 @@ KV_STRING = f'''
             Label:
                 text: "Caja [b]" + root.precio_caja + "[/b]"
                 markup: True
-                color: COL['success_dark']
+                color: app.theme['success_dark']
                 font_size: sp(9.5)
                 halign: 'left'
                 valign: 'middle'
@@ -587,7 +617,7 @@ KV_STRING = f'''
             Label:
                 text: "Blis [b]" + root.precio_blister + "[/b]"
                 markup: True
-                color: COL['primary']
+                color: app.theme['primary']
                 font_size: sp(9.5)
                 halign: 'left'
                 valign: 'middle'
@@ -596,7 +626,7 @@ KV_STRING = f'''
             Label:
                 text: "Und [b]" + root.precio_unidad + "[/b]"
                 markup: True
-                color: COL['accent_dark']
+                color: app.theme['accent_dark']
                 font_size: sp(9.5)
                 halign: 'left'
                 valign: 'middle'
@@ -612,7 +642,7 @@ KV_STRING = f'''
                 width: dp(10)
                 canvas:
                     Color:
-                        rgba: COL['success'] if root.estado == "SI HAY" else COL['danger']
+                        rgba: app.theme['success'] if root.estado == "SI HAY" else app.theme['danger']
                     Ellipse:
                         pos: self.x, self.center_y - dp(4)
                         size: dp(8), dp(8)
@@ -623,7 +653,7 @@ KV_STRING = f'''
                 halign: 'left'
                 valign: 'middle'
                 text_size: self.size
-                color: COL['success'] if root.estado == "SI HAY" else COL['danger']
+                color: app.theme['success'] if root.estado == "SI HAY" else app.theme['danger']
 
     BoxLayout:
         orientation: 'vertical'
@@ -632,22 +662,22 @@ KV_STRING = f'''
         padding: [dp(2), dp(20), dp(6), dp(20)]
         MIconButton:
             icon: 'cart_plus'
-            bg: COL['success']
-            bg_down: COL['success_dark']
+            bg: app.theme['success']
+            bg_down: app.theme['success_dark']
             font_size: sp(15)
             radius: dp(9)
             size_hint_y: None
             height: dp(30)
-            on_press: root.agregar_al_carrito()
+            on_release: root.agregar_al_carrito()
         MIconButton:
             icon: 'trash'
-            bg: COL['danger']
-            bg_down: COL['danger_dark']
+            bg: app.theme['danger']
+            bg_down: app.theme['danger_dark']
             font_size: sp(13)
             radius: dp(9)
             size_hint_y: None
             height: dp(30)
-            on_press: root.eliminar_producto()
+            on_release: root.eliminar_producto()
 
 # ============================================================
 #  PANTALLA DE ACTIVACIÓN
@@ -656,7 +686,7 @@ KV_STRING = f'''
     name: 'activation'
     canvas.before:
         Color:
-            rgba: COL['bg']
+            rgba: app.theme['bg']
         Rectangle:
             size: self.size
             pos: self.pos
@@ -678,7 +708,7 @@ KV_STRING = f'''
             text: "Activación requerida"
             font_size: sp(20)
             bold: True
-            color: COL['text']
+            color: app.theme['text']
             size_hint_y: None
             height: dp(32)
             halign: 'center'
@@ -686,7 +716,7 @@ KV_STRING = f'''
         Label:
             text: "Activa la aplicación para comenzar a usarla"
             font_size: sp(12.5)
-            color: COL['text_soft']
+            color: app.theme['text_soft']
             size_hint_y: None
             height: dp(22)
             halign: 'center'
@@ -700,9 +730,10 @@ KV_STRING = f'''
             height: dp(118)
             padding: [dp(16), dp(14)]
             spacing: dp(8)
+            bg: app.theme['card']
             Label:
                 text: "ID DEL DISPOSITIVO"
-                color: COL['text_mute']
+                color: app.theme['text_mute']
                 bold: True
                 size_hint_y: None
                 height: dp(16)
@@ -719,7 +750,7 @@ KV_STRING = f'''
                     text: ""
                     readonly: True
                     font_size: sp(12)
-                    foreground_color: COL['primary']
+                    foreground_color: app.theme['primary']
                 MTextIconButton:
                     icon: 'copy'
                     label: 'Copiar'
@@ -728,9 +759,9 @@ KV_STRING = f'''
                     gap: dp(5)
                     size_hint_x: None
                     width: dp(98)
-                    bg: COL['primary']
-                    bg_down: COL['primary_dark']
-                    on_press: root.copiar_id()
+                    bg: app.theme['primary']
+                    bg_down: app.theme['primary_dark']
+                    on_release: root.copiar_id()
         Widget:
             size_hint_y: None
             height: dp(2)
@@ -747,13 +778,13 @@ KV_STRING = f'''
             label_size: sp(15)
             size_hint_y: None
             height: dp(52)
-            bg: COL['accent']
-            bg_down: COL['accent_dark']
-            on_press: root.activar()
+            bg: app.theme['accent']
+            bg_down: app.theme['accent_dark']
+            on_release: root.activar()
         Label:
             id: error_label
             text: ""
-            color: COL['danger']
+            color: app.theme['danger']
             size_hint_y: None
             height: dp(22)
             font_size: sp(12)
@@ -762,21 +793,23 @@ KV_STRING = f'''
         Widget:
         Label:
             text: "¿No tienes código? Contacta al desarrollador"
-            color: COL['text_mute']
+            color: app.theme['text_mute']
             font_size: sp(10.5)
             size_hint_y: None
             height: dp(20)
             halign: 'center'
             text_size: self.width, None
         Label:
-            text: "chavezgaravitoj@gmail.com  ·  rinconchavezsantiago555@gmail.com"
-            color: COL['primary']
+            markup: True
+            text: "[ref=dev1][u]chavezgaravitoj@gmail.com[/u][/ref]  ·  [ref=dev2][u]rinconchavezsantiago555@gmail.com[/u][/ref]"
+            color: app.theme['primary']
             bold: True
             font_size: sp(10)
             size_hint_y: None
             height: dp(20)
             halign: 'center'
             text_size: self.width, None
+            on_ref_press: root.abrir_correo(*args)
 
 # ============================================================
 #  PANTALLA PRINCIPAL / CATÁLOGO
@@ -785,7 +818,7 @@ KV_STRING = f'''
     name: 'catalog'
     canvas.before:
         Color:
-            rgba: COL['bg']
+            rgba: app.theme['bg']
         Rectangle:
             size: self.size
             pos: self.pos
@@ -801,12 +834,12 @@ KV_STRING = f'''
             spacing: dp(10)
             canvas.before:
                 Color:
-                    rgba: COL['primary_dark']
+                    rgba: app.theme['primary_dark']
                 Rectangle:
                     size: self.size
                     pos: self.pos
                 Color:
-                    rgba: COL['accent']
+                    rgba: app.theme['accent']
                 Rectangle:
                     size: self.width, dp(3)
                     pos: self.x, self.y
@@ -821,7 +854,7 @@ KV_STRING = f'''
                 spacing: dp(3)
                 Label:
                     text: "PRECIOS FARMACENTER"
-                    color: COL['white']
+                    color: app.theme['white']
                     bold: True
                     font_size: sp(14)
                     halign: 'left'
@@ -847,6 +880,15 @@ KV_STRING = f'''
                     size_hint_y: None
                     height: dp(4)
                     opacity: 0
+            MIconButton:
+                icon: 'cog'
+                bg: (0, 0, 0, 0)
+                bg_down: (1, 1, 1, 0.18)
+                shadow_on: False
+                font_size: sp(20)
+                size_hint_x: None
+                width: dp(40)
+                on_release: app.abrir_ajustes()
 
         # ---- BARRA DE BÚSQUEDA ----
         BoxLayout:
@@ -862,6 +904,7 @@ KV_STRING = f'''
                 width: dp(86)
                 font_size: sp(11)
                 radius: dp(12)
+                bg: app.theme['primary']
                 on_text: root.on_spinner_change(self.text)
             MTextInput:
                 id: search_input
@@ -871,13 +914,13 @@ KV_STRING = f'''
                 on_text: root.on_search_text(self.text)
             MIconButton:
                 icon: 'close'
-                bg: COL['text_mute']
-                bg_down: COL['text_soft']
+                bg: app.theme['text_mute']
+                bg_down: app.theme['text_soft']
                 size_hint_x: None
                 width: dp(44)
                 font_size: sp(18)
                 radius: dp(12)
-                on_press:
+                on_release:
                     root.ids.search_input.text = ""
                     root.on_search_text("")
             MButton:
@@ -886,11 +929,11 @@ KV_STRING = f'''
                 font_size: sp(12)
                 size_hint_x: None
                 width: dp(96)
-                bg: COL['success']
-                bg_down: COL['success_dark']
+                bg: app.theme['success']
+                bg_down: app.theme['success_dark']
                 radius: dp(12)
                 disabled: True
-                on_press: root.abrir_carrito()
+                on_release: root.abrir_carrito()
 
         # ---- LISTA DE PRODUCTOS ----
         RecycleView:
@@ -914,12 +957,12 @@ KV_STRING = f'''
             padding: [dp(12), dp(8), dp(12), dp(10)]
             canvas.before:
                 Color:
-                    rgba: COL['card']
+                    rgba: app.theme['card']
                 Rectangle:
                     size: self.size
                     pos: self.pos
                 Color:
-                    rgba: COL['border']
+                    rgba: app.theme['border']
                 Rectangle:
                     size: self.width, dp(1)
                     pos: self.x, self.top - dp(1)
@@ -928,28 +971,28 @@ KV_STRING = f'''
                 label: 'SINCRONIZAR'
                 icon_size: sp(16)
                 label_size: sp(10.5)
-                bg: COL['primary']
-                bg_down: COL['primary_dark']
-                on_press: root.sincronizar()
+                bg: app.theme['primary']
+                bg_down: app.theme['primary_dark']
+                on_release: root.sincronizar()
             MTextIconButton:
                 icon: 'chart'
                 label: 'VENTAS'
                 icon_size: sp(16)
                 label_size: sp(10.5)
                 size_hint_x: 0.42
-                bg: COL['accent']
-                bg_down: COL['accent_dark']
-                on_press: root.ir_historial_ventas()
+                bg: app.theme['accent']
+                bg_down: app.theme['accent_dark']
+                on_release: root.ir_historial_ventas()
             MTextIconButton:
                 icon: 'store'
                 label: 'SUCURSAL'
                 icon_size: sp(16)
                 label_size: sp(10.5)
                 size_hint_x: 0.46
-                bg: COL['text_soft']
-                bg_down: COL['text']
+                bg: app.theme['text_soft']
+                bg_down: app.theme['text']
                 font_size: sp(11)
-                on_press: app.ir_a_seleccion_sucursal()
+                on_release: app.ir_a_seleccion_sucursal()
 
 # ============================================================
 #  HISTORIAL DE VENTAS
@@ -958,7 +1001,7 @@ KV_STRING = f'''
     name: 'historial_ventas'
     canvas.before:
         Color:
-            rgba: COL['bg']
+            rgba: app.theme['bg']
         Rectangle:
             size: self.size
             pos: self.pos
@@ -972,18 +1015,18 @@ KV_STRING = f'''
             padding: [dp(16), 0]
             canvas.before:
                 Color:
-                    rgba: COL['primary_dark']
+                    rgba: app.theme['primary_dark']
                 Rectangle:
                     size: self.size
                     pos: self.pos
                 Color:
-                    rgba: COL['accent']
+                    rgba: app.theme['accent']
                 Rectangle:
                     size: self.width, dp(3)
                     pos: self.x, self.y
             Label:
                 text: "HISTORIAL DE VENTAS"
-                color: COL['white']
+                color: app.theme['white']
                 bold: True
                 font_size: sp(16)
                 halign: 'center'
@@ -1006,6 +1049,7 @@ KV_STRING = f'''
                     values: ['TODOS']
                     size_hint_x: 0.5
                     font_size: sp(11)
+                    bg: app.theme['primary']
                     on_text: root.aplicar_filtros()
                 MSpinner:
                     id: filtro_periodo
@@ -1013,6 +1057,7 @@ KV_STRING = f'''
                     values: ['TODAS', 'HOY', 'AYER', 'ÚLTIMA SEMANA', 'ÚLTIMO MES', 'ESTE MES']
                     size_hint_x: 0.5
                     font_size: sp(11)
+                    bg: app.theme['primary']
                     on_text: root.aplicar_filtros()
 
             # tarjeta total
@@ -1021,10 +1066,10 @@ KV_STRING = f'''
                 height: dp(58)
                 padding: [dp(16), dp(8)]
                 spacing: dp(8)
-                bg: COL['primary_light']
+                bg: app.theme['primary_light']
                 Label:
                     text: "TOTAL"
-                    color: COL['primary_dark']
+                    color: app.theme['primary_dark']
                     bold: True
                     font_size: sp(11)
                     halign: 'left'
@@ -1034,7 +1079,7 @@ KV_STRING = f'''
                 Label:
                     id: total_label
                     text: "Total: $0"
-                    color: COL['success_dark']
+                    color: app.theme['success_dark']
                     bold: True
                     font_size: sp(18)
                     halign: 'right'
@@ -1060,21 +1105,31 @@ KV_STRING = f'''
                 spacing: dp(8)
                 MTextIconButton:
                     icon: 'pdf'
-                    label: 'EXPORTAR PDF'
-                    icon_size: sp(17)
-                    label_size: sp(12)
-                    bg: COL['danger']
-                    bg_down: COL['danger_dark']
-                    on_press: root.exportar_pdf()
+                    label: 'PDF'
+                    icon_size: sp(16)
+                    label_size: sp(11)
+                    size_hint_x: 0.3
+                    bg: app.theme['danger']
+                    bg_down: app.theme['danger_dark']
+                    on_release: root.exportar_pdf()
+                MTextIconButton:
+                    icon: 'chart'
+                    label: 'RESUMEN'
+                    icon_size: sp(16)
+                    label_size: sp(11)
+                    size_hint_x: 0.36
+                    bg: app.theme['primary']
+                    bg_down: app.theme['primary_dark']
+                    on_release: root.mostrar_resumen_ventas()
                 MTextIconButton:
                     icon: 'back'
                     label: 'CERRAR'
                     icon_size: sp(16)
-                    label_size: sp(12)
-                    size_hint_x: 0.42
-                    bg: COL['text_soft']
-                    bg_down: COL['text']
-                    on_press: root.cerrar_historial()
+                    label_size: sp(11)
+                    size_hint_x: 0.34
+                    bg: app.theme['text_soft']
+                    bg_down: app.theme['text']
+                    on_release: root.cerrar_historial()
 
 # ============================================================
 #  SELECCIÓN DE SUCURSAL
@@ -1083,7 +1138,7 @@ KV_STRING = f'''
     name: 'sucursal_selection'
     canvas.before:
         Color:
-            rgba: COL['bg']
+            rgba: app.theme['bg']
         Rectangle:
             size: self.size
             pos: self.pos
@@ -1101,7 +1156,7 @@ KV_STRING = f'''
                 pos_hint: {{'center_x': 0.5}}
         Label:
             text: 'Sistema de consulta de precios'
-            color: COL['text_soft']
+            color: app.theme['text_soft']
             font_size: sp(12)
             size_hint_y: None
             height: dp(22)
@@ -1111,7 +1166,7 @@ KV_STRING = f'''
             text: 'Selecciona tu sucursal'
             font_size: sp(20)
             bold: True
-            color: COL['text']
+            color: app.theme['text']
             size_hint_y: None
             height: dp(36)
             halign: 'center'
@@ -1130,9 +1185,9 @@ KV_STRING = f'''
                 gap: dp(10)
                 size_hint_y: None
                 height: dp(58)
-                bg: COL['primary']
-                bg_down: COL['primary_dark']
-                on_press: root.seleccionar_con_contraseña('Maíz Amarillo')
+                bg: app.theme['primary']
+                bg_down: app.theme['primary_dark']
+                on_release: root.seleccionar_con_contraseña('Maíz Amarillo')
             MTextIconButton:
                 icon: 'leaf'
                 label: 'Terranova'
@@ -1141,31 +1196,31 @@ KV_STRING = f'''
                 gap: dp(10)
                 size_hint_y: None
                 height: dp(58)
-                bg: COL['primary']
-                bg_down: COL['primary_dark']
-                on_press: root.seleccionar_con_contraseña('Terranova')
+                bg: app.theme['primary']
+                bg_down: app.theme['primary_dark']
+                on_release: root.seleccionar_con_contraseña('Terranova')
             MTextIconButton:
-                icon: 'city'
+                icon: 'star'
                 label: 'Villaceleste'
                 icon_size: sp(20)
                 label_size: sp(15)
                 gap: dp(10)
                 size_hint_y: None
                 height: dp(58)
-                bg: COL['primary']
-                bg_down: COL['primary_dark']
-                on_press: root.seleccionar_con_contraseña('Villaceleste')
+                bg: app.theme['primary']
+                bg_down: app.theme['primary_dark']
+                on_release: root.seleccionar_con_contraseña('Villaceleste')
             MTextIconButton:
-                icon: 'building'
+                icon: 'medical_bag'
                 label: 'Covipro'
                 icon_size: sp(20)
                 label_size: sp(15)
                 gap: dp(10)
                 size_hint_y: None
                 height: dp(58)
-                bg: COL['primary']
-                bg_down: COL['primary_dark']
-                on_press: root.seleccionar_con_contraseña('Covipro')
+                bg: app.theme['primary']
+                bg_down: app.theme['primary_dark']
+                on_release: root.seleccionar_con_contraseña('Covipro')
         Widget:
 
 # ============================================================
@@ -1175,7 +1230,7 @@ KV_STRING = f'''
     name: 'splash'
     canvas.before:
         Color:
-            rgba: COL['primary_dark']
+            rgba: app.theme['primary_dark']
         Rectangle:
             size: self.size
             pos: self.pos
@@ -1191,7 +1246,7 @@ KV_STRING = f'''
         Label:
             id: status_label
             text: "Iniciando Sistema..."
-            color: COL['white']
+            color: app.theme['white']
             bold: True
             font_size: sp(15)
             size_hint_y: None
@@ -1220,6 +1275,34 @@ Builder.load_string(KV_STRING)
 # ============================================================
 # CLASES DE PANTALLAS
 # ============================================================
+class ThemeToggleButton(MIconButton):
+    """Botón sol/luna que alterna el tema con una animación de giro.
+    Muestra el sol en modo claro y la luna en modo oscuro; al pulsarlo gira
+    360° y cambia el glifo a la mitad del giro, como si se transformara."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._set_glyph()
+        Clock.schedule_once(lambda dt: self._set_glyph(), 0)
+
+    def _set_glyph(self, *a):
+        app = App.get_running_app()
+        self.icon = 'moon' if (app and app.dark_mode) else 'sun'
+
+    def on_release(self):
+        Animation.cancel_all(self, 'spin')
+        self.spin = 0
+        anim = Animation(spin=360, d=0.45, t='in_out_cubic')
+        anim.bind(on_complete=lambda *a: setattr(self, 'spin', 0))
+        anim.start(self)
+        # El tema cambia y el glifo se intercambia a mitad del giro.
+        Clock.schedule_once(self._aplicar, 0.22)
+
+    def _aplicar(self, dt):
+        app = App.get_running_app()
+        app.alternar_tema()
+        self._set_glyph()
+
+
 class ActivationScreen(Screen):
     def on_enter(self):
         app = App.get_running_app()
@@ -1245,12 +1328,22 @@ class ActivationScreen(Screen):
         else:
             self.ids.error_label.text = "Código incorrecto. Verifique e intente nuevamente."
 
+    def abrir_correo(self, instance, ref):
+        correos = {
+            'dev1': 'chavezgaravitoj@gmail.com',
+            'dev2': 'rinconchavezsantiago555@gmail.com',
+        }
+        destinatario = correos.get(ref)
+        if destinatario:
+            abrir_cliente_correo(destinatario)
+
 
 class HistorialVentasScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.catalog_screen = None
-    
+        self.ventas_actuales = []
+
     def on_enter(self):
         app = App.get_running_app()
         if app.sucursal_actual:
@@ -1297,23 +1390,145 @@ class HistorialVentasScreen(Screen):
             ventas = [v for v in ventas if v.get('vendedor_nombre', '') == filtro_vendedor]
         
         if fecha_inicio and fecha_fin:
+            # Se comparan como fechas reales (no como texto) para que los
+            # rangos que cruzan fin de mes/año (p. ej. ÚLTIMA SEMANA) sean correctos.
+            d_inicio = datetime.strptime(fecha_inicio, "%d/%m/%Y")
+            d_fin = datetime.strptime(fecha_fin, "%d/%m/%Y")
             ventas_filtradas = []
             for v in ventas:
-                fecha_venta = v.get('fecha', '')
-                if fecha_inicio <= fecha_venta <= fecha_fin:
+                try:
+                    d_venta = datetime.strptime(v.get('fecha', ''), "%d/%m/%Y")
+                except ValueError:
+                    continue
+                if d_inicio <= d_venta <= d_fin:
                     ventas_filtradas.append(v)
             ventas = ventas_filtradas
-        
+
+        self.ventas_actuales = ventas
         total = calcular_total_ventas(ventas)
         self.ids.total_label.text = f"Total: ${total:,.0f}"
         self.mostrar_ventas(ventas)
-    
+
+    def mostrar_resumen_ventas(self):
+        """Resumen (productos más vendidos y desempeño por vendedor) del
+        período/vendedor que estén seleccionados en los filtros actuales."""
+        ventas = self.ventas_actuales
+
+        def _f(valor):
+            try:
+                return float(str(valor).replace(",", ""))
+            except (TypeError, ValueError):
+                return 0.0
+
+        content = BoxLayout(orientation='vertical', padding=dp(16), spacing=dp(10))
+        content.add_widget(Label(text="RESUMEN DE VENTAS", bold=True, font_size=sp(15),
+                                 color=COL['text'], size_hint_y=None, height=dp(24)))
+
+        if not ventas:
+            content.add_widget(Label(text="No hay ventas en este período para resumir.",
+                                     font_size=sp(13), bold=True, color=COL['text_soft'],
+                                     halign='center', size_hint_y=None, height=dp(40)))
+            popup = Popup(title='', content=content, size_hint=(0.85, 0.35), separator_height=0)
+            popup.open()
+            return
+
+        transacciones = set()
+        unidades = 0.0
+        total_dinero = 0.0
+        por_producto = {}
+        por_vendedor = {}
+        for v in ventas:
+            transacciones.add(v.get('transaccion_id') or v.get('id'))
+            cantidad = _f(v.get('cantidad'))
+            monto = _f(v.get('precio_total'))
+            unidades += cantidad
+            total_dinero += monto
+
+            prod = v.get('producto_nombre', 'Sin nombre')
+            acc_p = por_producto.setdefault(prod, [0.0, 0.0])
+            acc_p[0] += cantidad
+            acc_p[1] += monto
+
+            vend = v.get('vendedor_nombre', 'Sin vendedor')
+            acc_v = por_vendedor.setdefault(vend, [0.0, set()])
+            acc_v[0] += monto
+            acc_v[1].add(v.get('transaccion_id') or v.get('id'))
+
+        top_productos = sorted(por_producto.items(), key=lambda kv: kv[1][0], reverse=True)[:5]
+        ranking_vendedores = sorted(por_vendedor.items(), key=lambda kv: kv[1][0], reverse=True)
+
+        # --- Tres tarjetas resumen (ventas / unidades / total) ---
+        def _tile(valor, etiqueta, color):
+            c = MCard(orientation='vertical', bg=COL['primary_light'], radius=dp(14),
+                      shadow_on=False, padding=[dp(4), dp(8)], spacing=dp(2))
+            c.add_widget(Label(text=valor, bold=True, font_size=sp(15), color=color,
+                               size_hint_y=None, height=dp(24)))
+            c.add_widget(Label(text=etiqueta, font_size=sp(9), color=COL['text_soft'],
+                               size_hint_y=None, height=dp(14)))
+            return c
+
+        tiles = BoxLayout(size_hint_y=None, height=dp(66), spacing=dp(8))
+        tiles.add_widget(_tile(f"{len(transacciones)}", "VENTAS", COL['primary']))
+        tiles.add_widget(_tile(f"{unidades:,.0f}", "UNIDADES", COL['accent_dark']))
+        tiles.add_widget(_tile(f"${total_dinero:,.0f}", "TOTAL", COL['success_dark']))
+        content.add_widget(tiles)
+
+        def _seccion(txt):
+            l = Label(text=txt, bold=True, font_size=sp(12), color=COL['primary'],
+                      halign='left', valign='middle', size_hint_y=None, height=dp(28))
+            l.bind(size=lambda i, *a: setattr(i, 'text_size', i.size))
+            return l
+
+        def _fila(rank, nombre, detalle):
+            card = MCard(orientation='horizontal', bg=COL['bg'], radius=dp(12),
+                         shadow_on=False, padding=[dp(10), dp(6)], spacing=dp(8),
+                         size_hint_y=None, height=dp(52))
+            card.add_widget(Label(text=str(rank), bold=True, font_size=sp(14),
+                                  color=COL['primary'], size_hint_x=None, width=dp(24)))
+            col = BoxLayout(orientation='vertical')
+            n = Label(text=nombre, font_size=sp(11.5), bold=True, color=COL['text'],
+                      halign='left', valign='middle', shorten=True, shorten_from='right')
+            n.bind(size=lambda i, *a: setattr(i, 'text_size', i.size))
+            d = Label(text=detalle, font_size=sp(10.5), color=COL['text_soft'],
+                      halign='left', valign='middle')
+            d.bind(size=lambda i, *a: setattr(i, 'text_size', i.size))
+            col.add_widget(n)
+            col.add_widget(d)
+            card.add_widget(col)
+            return card
+
+        scroll = ScrollView(bar_width=dp(3))
+        lista = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(7),
+                          padding=[0, dp(4), 0, dp(4)])
+        lista.bind(minimum_height=lista.setter('height'))
+
+        lista.add_widget(_seccion("PRODUCTOS MÁS VENDIDOS"))
+        for i, (nombre, (cantidad, monto)) in enumerate(top_productos, 1):
+            lista.add_widget(_fila(i, nombre, f"{cantidad:,.0f} unid.   ·   ${monto:,.0f}"))
+
+        lista.add_widget(_seccion("VENTAS POR VENDEDOR"))
+        for i, (nombre, (monto, trans)) in enumerate(ranking_vendedores, 1):
+            lista.add_widget(_fila(i, nombre, f"{len(trans)} venta(s)   ·   ${monto:,.0f}"))
+
+        scroll.add_widget(lista)
+        content.add_widget(scroll)
+
+        btn_cerrar = MButton(text="CERRAR", bg=COL['text_soft'], bg_down=COL['text'],
+                             font_size=sp(12), size_hint_y=None, height=dp(46))
+        content.add_widget(btn_cerrar)
+
+        popup = Popup(title='', content=content, size_hint=(0.92, 0.82), separator_height=0)
+        btn_cerrar.bind(on_release=popup.dismiss)
+        popup.open()
+
     def mostrar_ventas(self, ventas):
         container = self.ids.ventas_container
         container.clear_widgets()
         
         if not ventas:
-            container.add_widget(Label(text="No hay ventas en este período", color=COL['text_mute'], font_size=sp(12.5)))
+            container.add_widget(Label(text="No hay ventas en este período",
+                                       color=COL['text_soft'], bold=True, font_size=sp(14),
+                                       size_hint_y=None, height=dp(60), halign='center', valign='middle'))
             return
         
         for v in ventas:
@@ -1358,7 +1573,7 @@ class HistorialVentasScreen(Screen):
             
             btn_eliminar = MIconButton(icon='trash', size_hint_x=0.18,
                                   bg=COL['danger'], bg_down=COL['danger_dark'], font_size=sp(16), radius=dp(10))
-            btn_eliminar.bind(on_press=lambda instance, id_venta=id_venta: self.confirmar_eliminar_venta(id_venta))
+            btn_eliminar.bind(on_release=lambda instance, id_venta=id_venta: self.confirmar_eliminar_venta(id_venta))
             fila.add_widget(btn_eliminar)
             
             container.add_widget(fila)
@@ -1393,13 +1608,13 @@ class HistorialVentasScreen(Screen):
                 popup_err = Popup(title='Error', content=content_err, size_hint=(0.6,0.3), auto_dismiss=True)
                 popup_err.open()
         
-        btn_si.bind(on_press=confirmar)
-        btn_no.bind(on_press=popup.dismiss)
+        btn_si.bind(on_release=confirmar)
+        btn_no.bind(on_release=popup.dismiss)
         popup.open()
 
     def exportar_pdf(self):
         if not PDF_DISPONIBLE:
-            popup = Popup(title='Error', content=Label(text='FPDF no está instalado en este dispositivo', font_size=sp(12)),
+            popup = Popup(title='Error', content=Label(text='FPDF no está instalado en este dispositivo', font_size=sp(12), color=COL['text']),
                          size_hint=(0.7, 0.3))
             popup.open()
             return
@@ -1426,7 +1641,7 @@ class HistorialVentasScreen(Screen):
             ventas = ventas_filtradas
         
         if not ventas:
-            popup = Popup(title='Sin datos', content=Label(text='No hay ventas para exportar', font_size=sp(12)),
+            popup = Popup(title='Sin datos', content=Label(text='No hay ventas para exportar', font_size=sp(12), color=COL['text']),
                          size_hint=(0.7, 0.3))
             popup.open()
             return
@@ -1438,8 +1653,7 @@ class HistorialVentasScreen(Screen):
                     ruta_guardado = os.path.join(primary_external_storage_path(), 'Download')
                 else:
                     ruta_guardado = RUTA_BASE
-            except Exception as e:
-                logger.warning(f"Permiso de almacenamiento no disponible, usando ruta interna: {e}")
+            except:
                 ruta_guardado = RUTA_BASE
         else:
             ruta_guardado = RUTA_BASE
@@ -1486,8 +1700,8 @@ class HistorialVentasScreen(Screen):
                     pdf.cell(col_widths[2], 7, precio_unitario, border=1, align='R')
                     pdf.cell(col_widths[3], 7, f"${total:,.0f}", border=1, align='R')
                     pdf.ln()
-                except Exception as e:
-                    logger.warning(f"Fila de venta omitida en PDF: {e}")
+                except:
+                    pass
             
             pdf.set_font('Arial', 'B', 9)
             pdf.cell(col_widths[0] + col_widths[1] + col_widths[2], 8, 'TOTAL GENERAL', border=1, align='R')
@@ -1497,10 +1711,10 @@ class HistorialVentasScreen(Screen):
             
             mensaje = f"PDF guardado en:\n{ruta_completa}"
             content = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
-            content.add_widget(Label(text=mensaje, halign='center', text_size=(dp(200), None), font_size=sp(11)))
+            content.add_widget(Label(text=mensaje, halign='center', text_size=(dp(200), None), font_size=sp(11), color=COL['text']))
             btn_ok = Button(text="OK", size_hint_y=None, height=dp(34), font_size=sp(12))
-            popup_exito = Popup(title='✅ Reporte generado', content=content, size_hint=(0.8, 0.5))
-            btn_ok.bind(on_press=popup_exito.dismiss)
+            popup_exito = Popup(title='Reporte generado', content=content, size_hint=(0.8, 0.5))
+            btn_ok.bind(on_release=popup_exito.dismiss)
             content.add_widget(btn_ok)
             popup_exito.open()
             
@@ -1508,12 +1722,12 @@ class HistorialVentasScreen(Screen):
                 try:
                     from android import intent
                     intent.action_view(ruta_completa)
-                except Exception as e:
-                    logger.warning(f"No se pudo abrir el PDF automáticamente: {e}")
+                except:
+                    pass
                     
         except Exception as e:
             logger.error(f"Error generando PDF: {e}")
-            popup = Popup(title='Error', content=Label(text=f'Error al generar PDF:\n{str(e)}', font_size=sp(11)),
+            popup = Popup(title='Error', content=Label(text=f'Error al generar PDF:\n{str(e)}', font_size=sp(11), color=COL['text']),
                          size_hint=(0.8, 0.4))
             popup.open()
     
@@ -1555,7 +1769,7 @@ class SucursalSelectionScreen(Screen):
         txt_password = MTextInput(
             hint_text="Contraseña",
             password=True,
-            password_mask='●',
+            password_mask='*',
             font_size=sp(16),
             size_hint_y=None,
             height=dp(50)
@@ -1589,12 +1803,13 @@ class SucursalSelectionScreen(Screen):
         
         def verificar(instance):
             password_ingresada = txt_password.text.strip()
-
-            if verificar_contrasena_sucursal(sucursal, password_ingresada):
+            contrasena_correcta = CONTRASENAS_SUCURSALES.get(sucursal, "")
+            
+            if password_ingresada == contrasena_correcta:
                 popup.dismiss()
                 app.seleccionar_sucursal(sucursal)
             else:
-                lbl_error.text = "❌ Contraseña incorrecta"
+                lbl_error.text = "Contraseña incorrecta"
                 txt_password.text = ""
                 txt_password.focus = True
         
@@ -1604,8 +1819,8 @@ class SucursalSelectionScreen(Screen):
         def enfocar_input(dt):
             txt_password.focus = True
             
-        btn_aceptar.bind(on_press=verificar)
-        btn_cancelar.bind(on_press=cancelar)
+        btn_aceptar.bind(on_release=verificar)
+        btn_cancelar.bind(on_release=cancelar)
         txt_password.bind(on_text_validate=verificar)  # Enter key
         
         popup.open()
@@ -1641,9 +1856,9 @@ class PreSplashScreen(Screen):
             content = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
             content.add_widget(Label(
                 text=f'No se pudieron cargar los datos.\n{error_msg}\n\nRevise su conexión a internet.',
-                color=(0.1, 0.1, 0.1, 1), halign='center', font_size=sp(11)))
+                color=COL['text'], halign='center', font_size=sp(11)))
             popup = Popup(title='Error de sincronización', content=content,
-                         size_hint=(0.85, 0.45), title_color=(0.1, 0.35, 0.65, 1),
+                         size_hint=(0.85, 0.45), title_color=COL['text'],
                          title_size=sp(14), separator_color=(0.8, 0.8, 0.8, 1))
             popup.open()
             Clock.schedule_once(lambda dt: self.ir_al_catalogo(), 3)
@@ -1660,6 +1875,7 @@ class CatalogScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._search_event = None
+        self._search_token = 0
         self.vendedor_actual = None
         self.carrito = []
         self.carrito_popup = None
@@ -1676,7 +1892,7 @@ class CatalogScreen(Screen):
         # ============================================================
         app = App.get_running_app()
         if app.sucursal_actual:
-            self.mostrar_mensaje_temporal(f"✅ Sucursal: {app.sucursal_actual}")
+            self.mostrar_mensaje_temporal(f"Sucursal: {app.sucursal_actual}")
 
     def limpiar_vendedor(self):
         self.vendedor_actual = None
@@ -1719,7 +1935,7 @@ class CatalogScreen(Screen):
         try:
             limpio = str(valor).strip().replace(",", "")
             return float(limpio)
-        except (ValueError, TypeError):
+        except:
             return 0.0
 
     def _fmt(self, valor):
@@ -1740,10 +1956,20 @@ class CatalogScreen(Screen):
         self._search_event = Clock.schedule_once(lambda dt: self.buscar_productos(texto), 0.3)
 
     def buscar_productos(self, texto=""):
-        t = texto.strip().upper()
+        # El acceso a ids/spinner se hace aquí (hilo de UI); la consulta a la
+        # base de datos se delega a un hilo aparte para no congelar la UI
+        # mientras el usuario escribe (sobre todo en celulares de gama baja).
         modos = {'NOMBRE': 'nombre', 'CÓDIGO': 'id', 'BARRAS': 'barras'}
         spinner = self.ids.get('search_spinner')
         campo = modos.get(spinner.text, 'nombre') if spinner else 'nombre'
+        self._search_token += 1
+        token = self._search_token
+        threading.Thread(
+            target=self._ejecutar_busqueda, args=(texto, campo, token), daemon=True
+        ).start()
+
+    def _ejecutar_busqueda(self, texto, campo, token):
+        t = texto.strip().upper()
         try:
             if not t:
                 query = "SELECT id, barras, laboratorio, nombre, p_caja, p_blister, p_unidad FROM productos ORDER BY nombre ASC LIMIT 100"
@@ -1779,9 +2005,15 @@ class CatalogScreen(Screen):
                     'catalog_screen': self
                 }
                 data.append(item)
-            self.ids.rv.data = data
         except Exception as e:
             logger.error(f"Error en búsqueda: {e}")
+            return
+        Clock.schedule_once(lambda dt: self._aplicar_resultados_busqueda(data, token))
+
+    def _aplicar_resultados_busqueda(self, data, token):
+        # Descarta resultados obsoletos si ya hay una búsqueda más reciente en curso.
+        if token == self._search_token:
+            self.ids.rv.data = data
 
     def eliminar_producto(self, id_prod):
         if not id_prod:
@@ -1806,15 +2038,15 @@ class CatalogScreen(Screen):
                 self.cursor.execute("DELETE FROM productos WHERE id = ?", (id_prod,))
                 self.conn.commit()
                 popup.dismiss()
-                self.mostrar_mensaje_temporal(f"🗑 Producto {id_prod} eliminado")
+                self.mostrar_mensaje_temporal(f"Producto {id_prod} eliminado")
                 self.buscar_productos(self.ids.search_input.text)
             except Exception as e:
                 popup.dismiss()
                 logger.error(f"Error eliminando producto: {e}")
                 self.mostrar_mensaje_temporal("Error al eliminar")
         
-        btn_si.bind(on_press=confirmar_eliminar)
-        btn_no.bind(on_press=popup.dismiss)
+        btn_si.bind(on_release=confirmar_eliminar)
+        btn_no.bind(on_release=popup.dismiss)
         popup.open()
 
     # ============================================================
@@ -1855,7 +2087,7 @@ class CatalogScreen(Screen):
                           size_hint_y=None, height=dp(48),
                           bg=COL['primary'], bg_down=COL['primary_dark'],
                           font_size=sp(13))
-            btn.bind(on_press=lambda instance, v=v: self.seleccionar_vendedor(v))
+            btn.bind(on_release=lambda instance, v=v: self.seleccionar_vendedor(v))
             lista_v.add_widget(btn)
         scroll_v.add_widget(lista_v)
         content.add_widget(scroll_v)
@@ -1878,7 +2110,7 @@ class CatalogScreen(Screen):
                 item['cantidad'] += 1
                 self.actualizar_carrito_popup()
                 self.actualizar_boton_vender()
-                self.mostrar_mensaje_temporal(f"📦 {producto['nombre'][:20]} +1")
+                self.mostrar_mensaje_temporal(f"{producto['nombre'][:20]} +1")
                 return
         
         item = {
@@ -1889,7 +2121,7 @@ class CatalogScreen(Screen):
         }
         self.carrito.append(item)
         self.actualizar_boton_vender()
-        self.mostrar_mensaje_temporal(f"➕ {producto['nombre'][:20]}")
+        self.mostrar_mensaje_temporal(f"{producto['nombre'][:20]}")
 
     def obtener_precio(self, producto, formato):
         if formato == 'Caja':
@@ -1917,13 +2149,13 @@ class CatalogScreen(Screen):
 
     def abrir_carrito(self):
         if not self.vendedor_actual:
-            popup = Popup(title='Atención', content=Label(text='Seleccione un vendedor primero', font_size=sp(12)),
+            popup = Popup(title='Atención', content=Label(text='Seleccione un vendedor primero', font_size=sp(12), color=COL['text']),
                           size_hint=(0.7, 0.3))
             popup.open()
             return
         
         if not self.carrito:
-            popup = Popup(title='Carrito vacío', content=Label(text='Agregue productos con el botón "+"', font_size=sp(12)),
+            popup = Popup(title='Carrito vacío', content=Label(text='Agregue productos con el botón "+"', font_size=sp(12), color=COL['text']),
                           size_hint=(0.7, 0.3))
             popup.open()
             return
@@ -1973,12 +2205,12 @@ class CatalogScreen(Screen):
             btn_menos = MButton(text="-", size_hint_x=0.32,
                               bg=COL['danger'], bg_down=COL['danger_dark'],
                               font_size=sp(18), radius=dp(9))
-            btn_menos.bind(on_press=lambda instance, i=idx: self.cambiar_cantidad_carrito(i, -1))
+            btn_menos.bind(on_release=lambda instance, i=idx: self.cambiar_cantidad_carrito(i, -1))
             txt_cant = Label(text=str(cantidad), font_size=sp(13), bold=True, color=COL['text'], size_hint_x=0.36)
             btn_mas = MButton(text="+", size_hint_x=0.32,
                              bg=COL['success'], bg_down=COL['success_dark'],
                              font_size=sp(18), radius=dp(9))
-            btn_mas.bind(on_press=lambda instance, i=idx: self.cambiar_cantidad_carrito(i, 1))
+            btn_mas.bind(on_release=lambda instance, i=idx: self.cambiar_cantidad_carrito(i, 1))
             caja_cantidad.add_widget(btn_menos)
             caja_cantidad.add_widget(txt_cant)
             caja_cantidad.add_widget(btn_mas)
@@ -1992,7 +2224,7 @@ class CatalogScreen(Screen):
             btn_eliminar = MIconButton(icon='close', size_hint_x=0.12,
                                   bg=COL['text_mute'], bg_down=COL['text_soft'],
                                   font_size=sp(14), radius=dp(9))
-            btn_eliminar.bind(on_press=lambda instance, i=idx: self.eliminar_del_carrito(i))
+            btn_eliminar.bind(on_release=lambda instance, i=idx: self.eliminar_del_carrito(i))
             controles.add_widget(btn_eliminar)
             
             fila.add_widget(controles)
@@ -2008,14 +2240,14 @@ class CatalogScreen(Screen):
         btn_pagar = MButton(text="PAGAR",
                           bg=COL['success'], bg_down=COL['success_dark'],
                           font_size=sp(13), size_hint_x=0.45)
-        btn_pagar.bind(on_press=lambda instance: self.procesar_pago(total_venta))
+        btn_pagar.bind(on_release=lambda instance: self.procesar_pago(total_venta))
         total_box.add_widget(btn_pagar)
         content.add_widget(total_box)
         
         btn_cerrar = MButton(text="CERRAR CARRITO", size_hint_y=None, height=dp(46),
                             bg=COL['text_soft'], bg_down=COL['text'],
                             font_size=sp(12))
-        btn_cerrar.bind(on_press=lambda instance: self.carrito_popup.dismiss())
+        btn_cerrar.bind(on_release=lambda instance: self.carrito_popup.dismiss())
         content.add_widget(btn_cerrar)
         
         self.carrito_popup = Popup(title='Carrito de compras', content=content,
@@ -2092,7 +2324,7 @@ class CatalogScreen(Screen):
                     lbl_cambio.text = f"Faltan ${abs(cambio):,.0f}"
                     lbl_cambio.color = (0.8,0.2,0.1,1)
                 return cambio >= 0
-            except (ValueError, TypeError):
+            except:
                 return False
         
         txt_dinero.bind(text=calcular_cambio)
@@ -2134,21 +2366,214 @@ class CatalogScreen(Screen):
             popup_pago.dismiss()
             
             content_confirm = BoxLayout(orientation='vertical', padding=dp(8), spacing=dp(8))
-            content_confirm.add_widget(Label(text="✅ Venta registrada exitosamente!", 
+            content_confirm.add_widget(Label(text="Venta registrada exitosamente!", 
                                             font_size=sp(14), color=(0.1,0.6,0.1,1), bold=True))
             content_confirm.add_widget(Label(text=f"Total: ${total_venta:,.0f}  |  Cambio: ${cambio:,.0f}",
-                                            font_size=sp(12), color=(0.1,0.35,0.65,1)))
+                                            font_size=sp(12), color=COL['text']))
             popup_confirm = Popup(title='Éxito', content=content_confirm,
                                  size_hint=(0.7, 0.3), auto_dismiss=True,
                                  title_color=(0.1,0.6,0.1,1), title_size=sp(14))
             popup_confirm.open()
             Clock.schedule_once(lambda dt: popup_confirm.dismiss(), 2)
         
-        btn_confirmar.bind(on_press=confirmar_venta)
-        btn_cancelar.bind(on_press=popup_pago.dismiss)
+        btn_confirmar.bind(on_release=confirmar_venta)
+        btn_cancelar.bind(on_release=popup_pago.dismiss)
         
         popup_pago.open()
         Clock.schedule_once(lambda dt: calcular_cambio(), 0.1)
+
+    # ============================================================
+    # RESPALDO Y RESTAURACIÓN DE LA BASE DE DATOS
+    # ============================================================
+    def abrir_respaldo(self):
+        content = BoxLayout(orientation='vertical', padding=dp(16), spacing=dp(12))
+        content.add_widget(Label(text="Respaldo de la base de datos",
+                                 font_size=sp(15), bold=True, color=COL['text'],
+                                 size_hint_y=None, height=dp(26)))
+        content.add_widget(Label(
+            text="Crea una copia de seguridad de los precios y productos\n"
+                 "actuales, o restaura una copia creada antes.",
+            font_size=sp(11), color=COL['text_soft'], halign='center',
+            text_size=(dp(260), None), size_hint_y=None, height=dp(44)))
+
+        popup = Popup(title='', content=content, size_hint=(0.88, 0.42),
+                     separator_height=0, auto_dismiss=True)
+
+        btn_crear = MTextIconButton(icon='save', label='CREAR COPIA DE SEGURIDAD',
+                                    icon_size=sp(18), label_size=sp(11.5),
+                                    bg=COL['primary'], bg_down=COL['primary_dark'],
+                                    size_hint_y=None, height=dp(48))
+        btn_restaurar = MTextIconButton(icon='restore', label='RESTAURAR UNA COPIA',
+                                        icon_size=sp(18), label_size=sp(11.5),
+                                        bg=COL['accent'], bg_down=COL['accent_dark'],
+                                        size_hint_y=None, height=dp(48))
+        content.add_widget(btn_crear)
+        content.add_widget(btn_restaurar)
+
+        def ir_crear(instance):
+            popup.dismiss()
+            self.crear_respaldo()
+
+        def ir_restaurar(instance):
+            popup.dismiss()
+            self.mostrar_lista_respaldos()
+
+        btn_crear.bind(on_release=ir_crear)
+        btn_restaurar.bind(on_release=ir_restaurar)
+        popup.open()
+
+    def crear_respaldo(self):
+        app = App.get_running_app()
+        # --- Diálogo "Creando copia..." con barra de progreso ---
+        content = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(16))
+        lbl = Label(text="Creando copia de seguridad...", color=COL['text'],
+                    font_size=sp(13), size_hint_y=None, height=dp(30))
+        barra = ProgressBar(max=100, value=5, size_hint_y=None, height=dp(16))
+        content.add_widget(lbl)
+        content.add_widget(barra)
+        popup = Popup(title='', content=content, size_hint=(0.82, 0.3),
+                     separator_height=0, auto_dismiss=False)
+        popup.open()
+
+        estado = {'done': False, 'ruta': '', 'err': ''}
+
+        def trabajo():
+            try:
+                sucursal = (app.sucursal_actual or 'sucursal').replace(' ', '_')
+                ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                destino = os.path.join(get_ruta_respaldos(), f"{sucursal}_{ts}.db")
+                self.conn.commit()
+                shutil.copy2(app.db_path, destino)
+                estado['ruta'] = destino
+            except Exception as e:
+                estado['err'] = str(e)
+                logger.error(f"Error creando respaldo: {e}")
+            estado['done'] = True
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
+        def tick(dt):
+            if estado['done']:
+                barra.value = 100
+                Clock.schedule_once(lambda dt: self._fin_respaldo(popup, estado), 0.3)
+                return False
+            barra.value = min(barra.value + 6, 92)  # avanza mientras copia
+            return True
+
+        Clock.schedule_interval(tick, 0.05)
+
+    def _fin_respaldo(self, popup_carga, estado):
+        popup_carga.dismiss()
+        content = BoxLayout(orientation='vertical', padding=dp(18), spacing=dp(12))
+        if estado['err']:
+            content.add_widget(Label(text="No se pudo crear la copia.",
+                                     color=COL['danger'], bold=True, font_size=sp(14),
+                                     size_hint_y=None, height=dp(28)))
+            content.add_widget(Label(text=estado['err'], color=COL['text_soft'],
+                                     font_size=sp(10), halign='center',
+                                     text_size=(dp(250), None)))
+        else:
+            content.add_widget(Label(text="Copia de seguridad creada", color=COL['success_dark'],
+                                     bold=True, font_size=sp(15), size_hint_y=None, height=dp(28)))
+            content.add_widget(Label(text="Guardada en:", color=COL['text'],
+                                     font_size=sp(11), size_hint_y=None, height=dp(20)))
+            content.add_widget(Label(text=get_ruta_respaldos(), color=COL['text_soft'],
+                                     font_size=sp(9.5), halign='center',
+                                     text_size=(dp(260), None)))
+        btn = MButton(text="LISTO", bg=COL['primary'], bg_down=COL['primary_dark'],
+                      font_size=sp(12), size_hint_y=None, height=dp(46))
+        content.add_widget(btn)
+        popup = Popup(title='', content=content, size_hint=(0.86, 0.4), separator_height=0)
+        btn.bind(on_release=popup.dismiss)
+        popup.open()
+
+    def mostrar_lista_respaldos(self):
+        app = App.get_running_app()
+        sucursal = (app.sucursal_actual or 'sucursal').replace(' ', '_')
+        try:
+            archivos = [f for f in os.listdir(get_ruta_respaldos())
+                       if f.startswith(sucursal) and f.endswith('.db')]
+        except Exception:
+            archivos = []
+        archivos.sort(reverse=True)
+
+        content = BoxLayout(orientation='vertical', padding=dp(14), spacing=dp(10))
+        content.add_widget(Label(text="Copias disponibles para\n" + (app.sucursal_actual or ""),
+                                 font_size=sp(13), bold=True, color=COL['text'],
+                                 halign='center', size_hint_y=None, height=dp(40)))
+
+        if not archivos:
+            content.add_widget(Label(text="No hay copias de seguridad guardadas todavía.",
+                                     font_size=sp(11), color=COL['text_soft'],
+                                     halign='center', size_hint_y=None, height=dp(40)))
+            popup = Popup(title='', content=content, size_hint=(0.85, 0.35), separator_height=0)
+            popup.open()
+            return
+
+        scroll_v = ScrollView(bar_width=dp(3))
+        lista_v = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(8))
+        lista_v.bind(minimum_height=lista_v.setter('height'))
+
+        popup = Popup(title='', content=content, size_hint=(0.88, 0.7), separator_height=0)
+
+        for nombre in archivos:
+            partes = nombre[:-3].split('_')
+            try:
+                dt = datetime.strptime(partes[-2] + partes[-1], "%Y%m%d%H%M%S")
+                etiqueta = dt.strftime("%d/%m/%Y   %H:%M:%S")
+            except Exception:
+                etiqueta = nombre[:-3].replace('_', ' ')
+            btn = MButton(text=etiqueta, font_size=sp(13),
+                         bg=COL['primary_light'], bg_down=COL['border'],
+                         color=COL['primary'], size_hint_y=None, height=dp(48))
+            btn.bind(on_release=lambda inst, n=nombre: (
+                popup.dismiss(), self.confirmar_restaurar_respaldo(n)))
+            lista_v.add_widget(btn)
+
+        scroll_v.add_widget(lista_v)
+        content.add_widget(scroll_v)
+        popup.open()
+
+    def confirmar_restaurar_respaldo(self, nombre_archivo):
+        content = BoxLayout(orientation='vertical', padding=dp(14), spacing=dp(12))
+        content.add_widget(Label(
+            text="¿Restaurar esta copia?\nSe reemplazarán los precios y\n"
+                 "productos actuales de esta sucursal.",
+            font_size=sp(13), color=COL['text'], halign='center',
+            text_size=(dp(240), None)))
+        btn_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(48), spacing=dp(8))
+        btn_si = MButton(text="SÍ, RESTAURAR", bg=COL['danger'], bg_down=COL['danger_dark'], font_size=sp(12))
+        btn_no = MButton(text="CANCELAR", bg=COL['text_soft'], bg_down=COL['text'], font_size=sp(12))
+        btn_box.add_widget(btn_si)
+        btn_box.add_widget(btn_no)
+        content.add_widget(btn_box)
+
+        popup = Popup(title='Confirmar restauración', content=content,
+                      size_hint=(0.85, 0.42), auto_dismiss=False)
+
+        def confirmar(instance):
+            popup.dismiss()
+            self.restaurar_respaldo(nombre_archivo)
+
+        btn_si.bind(on_release=confirmar)
+        btn_no.bind(on_release=popup.dismiss)
+        popup.open()
+
+    def restaurar_respaldo(self, nombre_archivo):
+        app = App.get_running_app()
+        try:
+            origen = os.path.join(get_ruta_respaldos(), nombre_archivo)
+            try:
+                self.conn.close()
+            except Exception:
+                pass
+            shutil.copy2(origen, app.db_path)
+            self.conectar_db()
+            self.buscar_productos(self.ids.search_input.text if hasattr(self.ids, 'search_input') else "")
+            self.mostrar_mensaje_temporal("Copia restaurada correctamente")
+        except Exception as e:
+            logger.error(f"Error restaurando respaldo: {e}")
+            self.mostrar_mensaje_temporal("Error al restaurar la copia")
 
     def ir_historial_ventas(self):
         app = App.get_running_app()
@@ -2215,8 +2640,7 @@ class CatalogScreen(Screen):
                             self.safe_float(row.get('ValorBlisterContado', 0)),
                             self.safe_float(row.get('ValorUnidadContado', 0)),
                         ))
-                    except Exception as e:
-                        logger.warning(f"Fila de CSV omitida en sincronización: {e}")
+                    except:
                         continue
                     filas_procesadas += 1
                     if filas_procesadas % 100 == 0:
@@ -2266,6 +2690,9 @@ class CatalogScreen(Screen):
 
 
 class MiBaseDrogApp(App):
+    theme = DictProperty(dict(tema.COL_LIGHT))
+    dark_mode = BooleanProperty(False)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.sucursal_actual = None
@@ -2277,20 +2704,100 @@ class MiBaseDrogApp(App):
         self.device_id = None
         self.activated = False
 
+    def aplicar_tema(self, oscuro):
+        """Cambia la paleta de colores de toda la app al instante.
+        `COL` se actualiza en el mismo objeto (no se reemplaza) porque main.py
+        y tema.py comparten esa referencia; `self.theme` es la copia reactiva
+        que usan las pantallas (KV) para repintarse solas al cambiar."""
+        # IMPORTANTE: actualizar la paleta ANTES de cambiar dark_mode. Varios
+        # widgets escuchan dark_mode para repintarse y, si se cambia primero,
+        # leerían los colores viejos (el texto quedaba invisible al alternar).
+        paleta = tema.COL_DARK if oscuro else tema.COL_LIGHT
+        COL.clear()
+        COL.update(paleta)
+        self.theme = dict(paleta)
+        self.dark_mode = oscuro
+
+    def alternar_tema(self):
+        self.aplicar_tema(not self.dark_mode)
+        self.guardar_configuracion_completa()
+        # Los campos de texto (MTextInput) pintan su fondo/borde una sola vez
+        # al crearse; hay que forzarlos a releer la paleta actual para que
+        # cambien de color al instante igual que el resto de la pantalla.
+        if self.root:
+            for widget in self.root.walk():
+                if isinstance(widget, MTextInput):
+                    widget._sync()
+
+    def _texto_tema(self):
+        return "Modo oscuro activado" if self.dark_mode else "Modo claro activado"
+
+    def abrir_ajustes(self):
+        content = BoxLayout(orientation='vertical', padding=dp(18), spacing=dp(14))
+        titulo = Label(text="AJUSTES", bold=True, font_size=sp(16),
+                       color=COL['text'], size_hint_y=None, height=dp(26))
+        content.add_widget(titulo)
+
+        # --- Fila: modo oscuro / claro con botón sol-luna animado ---
+        fila = BoxLayout(size_hint_y=None, height=dp(62), spacing=dp(12))
+        lbl_tema = Label(text=self._texto_tema(), color=COL['text'],
+                         font_size=sp(14), halign='left', valign='middle')
+        lbl_tema.bind(size=lambda i, *a: setattr(i, 'text_size', i.size))
+        toggle = ThemeToggleButton(size_hint=(None, None), size=(dp(54), dp(54)),
+                                   bg=COL['accent'], bg_down=COL['accent_dark'],
+                                   font_size=sp(24), radius=dp(27))
+        fila.add_widget(lbl_tema)
+        fila.add_widget(toggle)
+        content.add_widget(fila)
+
+        # --- Botón: respaldo de base de datos ---
+        btn_resp = MTextIconButton(icon='database', label='RESPALDO DE BASE DE DATOS',
+                                   icon_size=sp(18), label_size=sp(11.5),
+                                   bg=COL['primary'], bg_down=COL['primary_dark'],
+                                   size_hint_y=None, height=dp(52))
+        content.add_widget(btn_resp)
+
+        btn_cerrar = MButton(text="CERRAR", bg=COL['text_soft'], bg_down=COL['text'],
+                             font_size=sp(12), size_hint_y=None, height=dp(46))
+        content.add_widget(btn_cerrar)
+
+        popup = Popup(title='', content=content, size_hint=(0.88, 0.52),
+                     separator_height=0)
+
+        # Mantener legible el popup si se alterna el tema estando abierto.
+        def _refrescar(*a):
+            lbl_tema.text = self._texto_tema()
+            lbl_tema.color = COL['text']
+            titulo.color = COL['text']
+        self.bind(dark_mode=_refrescar)
+        popup.bind(on_dismiss=lambda *a: self.unbind(dark_mode=_refrescar))
+
+        def ir_respaldo(inst):
+            popup.dismiss()
+            cat = self.root.get_screen('catalog')
+            cat.abrir_respaldo()
+        btn_resp.bind(on_release=ir_respaldo)
+        btn_cerrar.bind(on_release=popup.dismiss)
+        popup.open()
+
     def build(self):
         self.title = "Precios Farmacenter"
         if os.path.exists(ICONO_PATH.replace('/', os.sep)):
             self.icon = ICONO_PATH
+
+        # Carga la config (incluye dark_mode) y aplica el tema ANTES de crear
+        # las pantallas, para que ya nazcan con los colores correctos.
+        self.cargar_configuracion_completa()
+        logger.info(f"Config cargada - sucursal: {self.sucursal_actual}")
+        self.aplicar_tema(self.dark_mode)
+
         sm = ScreenManager(transition=FadeTransition(duration=0.2))
         sm.add_widget(ActivationScreen(name='activation'))
         sm.add_widget(SucursalSelectionScreen(name='sucursal_selection'))
         sm.add_widget(PreSplashScreen(name='splash'))
         sm.add_widget(CatalogScreen(name='catalog'))
         sm.add_widget(HistorialVentasScreen(name='historial_ventas'))
-        
-        self.cargar_configuracion_completa()
-        logger.info(f"Config cargada - sucursal: {self.sucursal_actual}")
-        
+
         if self.device_id is None:
             self.device_id = generar_device_id()
             self.guardar_configuracion_completa()
@@ -2327,6 +2834,7 @@ class MiBaseDrogApp(App):
                     self.ultimas_sync = config.get('ultimas_sync', {})
                     self.device_id = config.get('device_id')
                     self.activated = config.get('activated', False)
+                    self.dark_mode = config.get('dark_mode', False)
             except Exception as e:
                 logger.error(f"Error cargando configuración: {e}")
                 self.pin_hash = None
@@ -2345,7 +2853,8 @@ class MiBaseDrogApp(App):
             'pin_hash': self.pin_hash,
             'ultimas_sync': self.ultimas_sync,
             'device_id': self.device_id,
-            'activated': self.activated
+            'activated': self.activated,
+            'dark_mode': self.dark_mode
         }
         try:
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -2414,11 +2923,11 @@ class MiBaseDrogApp(App):
         content.add_widget(Label(
             text=f"Sucursal guardada:\n{nombre_sucursal}",
             font_size=sp(16),
-            color=(0.1, 0.35, 0.65, 1),
+            color=COL['text'],
             halign='center'
         ))
         popup = Popup(
-            title='✅ Éxito',
+            title='Éxito',
             content=content,
             size_hint=(0.7, 0.3),
             auto_dismiss=True
@@ -2439,8 +2948,7 @@ class MiBaseDrogApp(App):
             count = cursor.fetchone()[0]
             conn.close()
             return count
-        except sqlite3.Error as e:
-            logger.error(f"Error contando productos en {self.db_path}: {e}")
+        except:
             return 0
 
     def descargar_y_sincronizar(self, callback=None):
@@ -2485,8 +2993,7 @@ class MiBaseDrogApp(App):
                             self._safe_float(row.get('ValorBlisterContado', 0)),
                             self._safe_float(row.get('ValorUnidadContado', 0)),
                         ))
-                    except Exception as e:
-                        logger.warning(f"Fila de CSV omitida en importación: {e}")
+                    except:
                         continue
             if datos:
                 cursor.execute("DELETE FROM productos")
@@ -2504,7 +3011,7 @@ class MiBaseDrogApp(App):
             return 0.0
         try:
             return float(str(valor).strip().replace(",", ""))
-        except (ValueError, TypeError):
+        except:
             return 0.0
 
     def cambiar_sucursal(self):
@@ -2516,8 +3023,8 @@ class MiBaseDrogApp(App):
                 cat = self.root.get_screen('catalog')
                 if hasattr(cat, 'conn') and cat.conn:
                     cat.conn.close()
-        except Exception as e:
-            logger.warning(f"Error cerrando conexión DB al salir: {e}")
+        except:
+            pass
 
 
 if __name__ == '__main__':
